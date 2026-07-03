@@ -24,3 +24,6 @@ venv/
 # Logs / observación
 *.log
 observations*.jsonl
+
+# Scratch de orquestación SDD
+.superpowers/
