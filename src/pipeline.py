@@ -22,8 +22,8 @@ class Pipeline:
         for link in self._extractor(text):
             try:
                 shop_id, item_id = self._resolver(link)
-            except ValueError:
-                logger.info("No se pudo resolver el link: %s", link)
+            except Exception as exc:
+                logger.info("No se pudo resolver el link: %s (%s)", link, exc)
                 continue
 
             if self._dedup.seen(item_id):

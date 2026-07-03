@@ -82,3 +82,24 @@ async def test_handle_ignores_text_without_shopee_link(tmp_path):
 
     assert count == 0
     assert poster.posts == []
+
+
+async def test_handle_skips_link_when_resolver_raises_network_error(tmp_path):
+    def _flaky_resolver(url):
+        raise RuntimeError("boom")  # simulates requests.exceptions.RequestException
+
+    poster = _FakePoster()
+    pipeline = Pipeline(
+        extractor=extract_shopee_links,
+        resolver=_flaky_resolver,
+        dedup=DedupStore(tmp_path / "d.db"),
+        client=MockShopeeClient(product=_sample_product()),
+        hookbank=HookBank(["GANCHO DE PRUEBA 🔥"]),
+        poster=poster,
+    )
+    text = "CORRE! 🛒 Compre aqui: https://s.shopee.com.br/6KxbHWtz5C"
+
+    count = await pipeline.handle(text)
+
+    assert count == 0
+    assert poster.posts == []

@@ -26,7 +26,7 @@ class MockShopeeClient:
             name="Produto de Teste Shopee",
             price_final=Decimal("16.90"),
             price_original=Decimal("35.00"),
-            image_url="https://cf.shopee.com.br/file/mock-image",
+            image_url="https://placehold.co/600x600.png?text=Mock+Produto",
             is_price_range=False,
             affiliate_link=f"https://s.shopee.com.br/mock{item_id}",
         )

@@ -102,7 +102,7 @@ class TelethonListener:
     def __init__(
         self,
         config: TelethonConfig,
-        on_text: Callable[[str], Awaitable[None]],
+        on_text: Callable[[str, Optional[str]], Awaitable[None]],
     ) -> None:
         self.config = config
         self.on_text = on_text
@@ -172,12 +172,8 @@ class TelethonListener:
                 if not in_scope:
                     return
                 # Pass chat_title so the pipeline can decide how to handle the
-                # message based on its source chat. Keep back-compat: a 1-arg
-                # callback still works.
-                try:
-                    await self.on_text(text, chat_title)
-                except TypeError:
-                    await self.on_text(text)
+                # message based on its source chat.
+                await self.on_text(text, chat_title)
             except Exception as exc:
                 logger.error(
                     "Telethon handler error: %s", exc, exc_info=True

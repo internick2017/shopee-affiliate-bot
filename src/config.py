@@ -4,6 +4,21 @@ from typing import List
 from dotenv import load_dotenv
 
 
+def _maybe_int(raw):
+    """Coerce a numeric string (optionally leading '-') to int; else return as-is.
+
+    Guards against malformed tokens like "--123" (passes the digit check after
+    stripping leading dashes but is not a valid int): falls back to the raw
+    value instead of raising.
+    """
+    if isinstance(raw, str) and raw and raw.lstrip("-").isdigit():
+        try:
+            return int(raw)
+        except ValueError:
+            return raw
+    return raw
+
+
 def load_config() -> dict:
     """Carga configuración desde .env (secretos) y variables con defaults."""
     load_dotenv()
@@ -14,7 +29,7 @@ def load_config() -> dict:
             token = token.strip()
             if not token:
                 continue
-            parsed.append(int(token) if token.lstrip("-").isdigit() else token)
+            parsed.append(_maybe_int(token))
         return parsed
 
     return {
@@ -22,7 +37,7 @@ def load_config() -> dict:
         "api_hash": os.getenv("TELEGRAM_API_HASH"),
         "shopee_app_id": os.getenv("SHOPEE_APP_ID"),
         "shopee_secret": os.getenv("SHOPEE_SECRET"),
-        "channel_id": os.getenv("TARGET_CHANNEL_ID"),
+        "channel_id": _maybe_int(os.getenv("TARGET_CHANNEL_ID")),
         "source_chats": _chats(os.getenv("SOURCE_CHATS", "")),
         "dedup_db": os.getenv("DEDUP_DB", "dedup.db"),
         "hooks_file": os.getenv("HOOKS_FILE", "hooks.txt"),
