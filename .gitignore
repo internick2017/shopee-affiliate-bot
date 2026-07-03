@@ -1,0 +1,26 @@
+# Secretos y credenciales
+.env
+.env.*
+!.env.example
+
+# Sesiones de Telethon
+*.session
+*.session-journal
+*.string
+
+# Estado local
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Logs / observación
+*.log
+observations*.jsonl
