@@ -1,6 +1,6 @@
 @echo off
 title Shopee Affiliate Bot
-cd /d "%~dp0"
+cd /d "E:\dev\07-tools-personal\shopee-affiliate-bot"
 echo ============================================
 echo   Shopee Affiliate Bot - iniciando...
 echo   (Ctrl+C para detener)

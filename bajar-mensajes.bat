@@ -1,10 +1,8 @@
 @echo off
 title Bajar mensajes de Telegram
-cd /d "%~dp0"
+cd /d "E:\dev\07-tools-personal\shopee-affiliate-bot"
 echo ============================================
 echo   Bajar mensajes de un canal de Telegram
-echo   (para armar el extractor de nombres)
-echo.
 echo   Canal por defecto: Crowman  ^|  40 mensajes
 echo   La primera vez pide telefono + codigo.
 echo ============================================
