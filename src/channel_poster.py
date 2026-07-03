@@ -13,3 +13,6 @@ class ChannelPoster:
         await self._client.send_file(
             self._channel, file=image_url, caption=text
         )
+
+    async def post_text(self, text: str) -> None:
+        await self._client.send_message(self._channel, text, link_preview=True)
