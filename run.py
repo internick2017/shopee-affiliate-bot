@@ -45,7 +45,10 @@ async def main() -> None:
     pipeline_holder = {}
 
     async def on_text(text, chat_title=None):
-        await pipeline_holder["pipeline"].handle(text, chat_title)
+        pipeline = pipeline_holder.get("pipeline")
+        if pipeline is None:
+            return
+        await pipeline.handle(text, chat_title)
 
     tel_cfg = TelethonConfig(
         session_name="shopee_user_session",
