@@ -36,19 +36,16 @@ async def main() -> None:
         client = MockShopeeClient()
         logger.warning("Sin credenciales Shopee: usando MockShopeeClient (datos de prueba).")
 
-    listener_holder = {}
+    # Holder for the shared pipeline: on_text is wired into the listener at
+    # construction time, but the pipeline needs the authenticated Telethon
+    # client, which only exists after listener.start() returns. The closure
+    # below reads pipeline_holder["pipeline"] lazily on each call, so it's
+    # safe as long as we populate it before any awaited code can dispatch a
+    # queued message (see note below).
+    pipeline_holder = {}
 
     async def on_text(text, chat_title=None):
-        poster = ChannelPoster(listener_holder["client"], cfg["channel_id"])
-        pipeline = Pipeline(
-            extractor=extract_shopee_links,
-            resolver=lambda url: resolve_shortlink(url),
-            dedup=DedupStore(cfg["dedup_db"]),
-            client=client,
-            hookbank=HookBank.from_file(cfg["hooks_file"]),
-            poster=poster,
-        )
-        await pipeline.handle(text, chat_title)
+        await pipeline_holder["pipeline"].handle(text, chat_title)
 
     tel_cfg = TelethonConfig(
         session_name="shopee_user_session",
@@ -57,7 +54,28 @@ async def main() -> None:
     )
     listener = TelethonListener(tel_cfg, on_text)
     await listener.start()
-    listener_holder["client"] = listener._client  # reusar la misma sesión para postear
+
+    # Build every stateful component ONCE and reuse it for the life of the
+    # process, instead of rebuilding them per message:
+    # - DedupStore opens a SQLite connection that is never closed otherwise
+    #   (a fresh one per message leaks connections/file handles over time).
+    # - HookBank tracks the last hook shown to avoid consecutive repeats;
+    #   rebuilding it per message resets that state every time.
+    # - hooks.txt is only read from disk once instead of on every message.
+    # No `await` happens between listener._client becoming available and
+    # pipeline_holder being populated, so under asyncio's single-threaded
+    # event loop no queued message can be dispatched to on_text before the
+    # pipeline is assigned.
+    poster = ChannelPoster(listener._client, cfg["channel_id"])
+    pipeline_holder["pipeline"] = Pipeline(
+        extractor=extract_shopee_links,
+        resolver=lambda url: resolve_shortlink(url),
+        dedup=DedupStore(cfg["dedup_db"]),
+        client=client,
+        hookbank=HookBank.from_file(cfg["hooks_file"]),
+        poster=poster,
+    )
+
     logger.info("Escuchando Telegram... (observe=%s)", observe)
     await listener.run_until_disconnected()
 
