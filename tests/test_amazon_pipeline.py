@@ -1,6 +1,8 @@
 from src.amazon_pipeline import AmazonPipeline
+from src.post_builder import HookBank
 
 TAG = "ofertaslanny-20"
+HOOK = "GANCHO DE PRUEBA 🔥"
 
 AMAZON_TEXT = (
     "🔥 Smirnoff Vodka 600Ml\n\n"
@@ -24,9 +26,13 @@ class _FakePoster:
         self.posts.append(text)
 
 
+def _pipeline(poster):
+    return AmazonPipeline(TAG, poster, HookBank([HOOK]))
+
+
 async def test_posts_amazon_offer():
     poster = _FakePoster()
-    pipeline = AmazonPipeline(TAG, poster)
+    pipeline = _pipeline(poster)
 
     result = await pipeline.handle(AMAZON_TEXT, "Crowman Promos")
 
@@ -34,11 +40,13 @@ async def test_posts_amazon_offer():
     assert len(poster.posts) == 1
     assert TAG in poster.posts[0]
     assert "crowmantech-20" not in poster.posts[0]
+    assert "🛍️ " in poster.posts[0]
+    assert poster.posts[0].startswith(HOOK)
 
 
 async def test_skips_mercadolivre():
     poster = _FakePoster()
-    pipeline = AmazonPipeline(TAG, poster)
+    pipeline = _pipeline(poster)
 
     result = await pipeline.handle(MERCADOLIVRE_TEXT, "Crowman Promos")
 
@@ -48,7 +56,7 @@ async def test_skips_mercadolivre():
 
 async def test_skips_when_no_links():
     poster = _FakePoster()
-    pipeline = AmazonPipeline(TAG, poster)
+    pipeline = _pipeline(poster)
 
     result = await pipeline.handle(PLAIN_TEXT, "Crowman Promos")
 

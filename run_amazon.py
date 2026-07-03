@@ -15,6 +15,7 @@ import sys
 from src.amazon_pipeline import AmazonPipeline
 from src.channel_poster import ChannelPoster
 from src.config import load_config
+from src.post_builder import HookBank
 from src.telegram_listener import TelethonConfig, TelethonListener
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -94,7 +95,8 @@ async def main() -> None:
     # pipeline_holder, so no queued message can reach on_text before the
     # pipeline is assigned.
     poster = ChannelPoster(listener._client, target)
-    pipeline_holder["pipeline"] = AmazonPipeline(cfg["amazon_tag"], poster)
+    hookbank = HookBank.from_file(cfg["hooks_file"])
+    pipeline_holder["pipeline"] = AmazonPipeline(cfg["amazon_tag"], poster, hookbank)
 
     logger.info(
         "Bot Amazon listo. tag=%s source_chats=%s target=%s (observe=%s)",
