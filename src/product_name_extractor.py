@@ -1,16 +1,7 @@
 import re
 from typing import List, Optional
 
-# A line is a PRICE line if it contains "R$" immediately followed by an
-# optional space and a digit anywhere in the line.
-_PRICE_RS_RE = re.compile(r"R\$\s?\d")
-
-# Or, ignoring leading emojis/symbols, if it starts with a number followed by
-# one of these "price mention" phrases (e.g. "28,99 à vista", "224,61 em até 6x").
-_PRICE_PLAIN_RE = re.compile(
-    r"^\d[\d.,]*\s*(à vista|no pix|via pix|em até|parcelado|em \d+x)",
-    re.IGNORECASE,
-)
+from .prices import is_price_line as _is_price_line
 
 _ANUNCIO_RE = re.compile(r"^an[uú]ncio$", re.IGNORECASE)
 _OFERTA_RE = re.compile(
@@ -28,15 +19,6 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 def _strip_leading_symbols(line: str) -> str:
     return _LEADING_SYMBOLS_RE.sub("", line)
-
-
-def _is_price_line(line: str) -> bool:
-    if _PRICE_RS_RE.search(line):
-        return True
-    core = _strip_leading_symbols(line).strip()
-    if _PRICE_PLAIN_RE.match(core):
-        return True
-    return False
 
 
 def _is_noise_line(line: str) -> bool:

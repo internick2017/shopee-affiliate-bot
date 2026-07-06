@@ -103,3 +103,27 @@ def test_amazon_prime_with_bullets():
 def test_empty_and_none():
     assert extract_product_names("") == []
     assert extract_product_names(None) == []
+
+
+def test_iachados_de_por_product_name():
+    text = (
+        "COM ESSA MAIONESE, ATÉ O PÃO FICA CHIQUE DEMAIS! 😎\n\n"
+        "🍔 Heinz Maionese Alho Tostado Com Ervas 215g\n\n"
+        "🔥 DE 13,59 | POR 9,16\n"
+        "🎟 CUPOM: MERCADO\n\n"
+        "🔗 https://www.amazon.com.br/dp/B0B25NN5HL?th=1&psc=1&tag=iachadospromo-20\n\n"
+        "🔹 Oferta exclusiva membros Amazon Prime.\n\n"
+        "🛍️ IAchados"
+    )
+    assert extract_product_names(text) == ["Heinz Maionese Alho Tostado Com Ervas 215g"]
+
+
+def test_iachados_primeday_coupon_returns_empty():
+    text = (
+        "ESSE DESCONTO É MELHOR QUE ACHADO EM GARAGEM!\n\n"
+        "➡️ 10% OFF a partir de R$300, limitado a R$100 OFF\n"
+        "🎟 cupom: PRIMEIRO\n\n"
+        "🔗 https://www.amazon.com.br/primeday?tag=iachadospromo-20\n\n"
+        "🛍️ IAchados"
+    )
+    assert extract_product_names(text) == []
