@@ -58,3 +58,33 @@ def test_build_lanny_amazon_post_skips_mercadolivre():
 
 def test_build_lanny_amazon_post_no_amazon():
     assert build_lanny_amazon_post("Bom dia sem links", TAG, "GANCHO") is None
+
+
+def test_build_lanny_amazon_post_iachados_de_por():
+    text = (
+        "COM ESSA MAIONESE, ATÉ O PÃO FICA CHIQUE DEMAIS! 😎\n\n"
+        "🍔 Heinz Maionese Alho Tostado Com Ervas 215g\n\n"
+        "🔥 DE 13,59 | POR 9,16\n"
+        "🎟 CUPOM: MERCADO\n\n"
+        "🔗 https://www.amazon.com.br/dp/B0B25NN5HL?th=1&psc=1&tag=iachadospromo-20\n\n"
+        "🔹 Oferta exclusiva membros Amazon Prime.\n\n"
+        "🛍️ IAchados"
+    )
+    post = build_lanny_amazon_post(text, TAG, "GANCHO")
+    assert post is not None
+    assert "Heinz Maionese Alho Tostado Com Ervas 215g" in post
+    assert "R$ 9,16" in post
+    assert "R$ 13,59" in post
+    assert "tag=ofertaslanny-20" in post
+    assert "iachadospromo-20" not in post
+
+
+def test_build_lanny_amazon_post_iachados_primeday_is_none():
+    text = (
+        "ESSE DESCONTO É MELHOR QUE ACHADO EM GARAGEM!\n\n"
+        "➡️ 10% OFF a partir de R$300, limitado a R$100 OFF\n"
+        "🎟 cupom: PRIMEIRO\n\n"
+        "🔗 https://www.amazon.com.br/primeday?tag=iachadospromo-20\n\n"
+        "🛍️ IAchados"
+    )
+    assert build_lanny_amazon_post(text, TAG, "GANCHO") is None
