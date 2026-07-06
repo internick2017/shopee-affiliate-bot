@@ -4,7 +4,7 @@
 Uso:
     python sembrar_canal.py [N]     (N por defecto = 10)
 
-- Reusa la sesión `shopee_user_session` del bot. El bot de Amazon debe estar
+- Reusa la sesión `shopee_user_session` del bot. El bot de ofertas debe estar
   DETENIDO al correr esto, para no chocar con la misma sesión.
 - Lee AMAZON_TAG, SOURCE_CHATS y TARGET_CHANNEL_ID del .env (igual que el bot).
 - Solo postea las ofertas de Amazon (las de Mercado Livre se saltean).

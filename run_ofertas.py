@@ -1,25 +1,29 @@
-"""Entry point: modo Amazon — escucha Telegram y publica ofertas de Amazon con el
-tag de afiliado del owner en el canal privado.
+"""Entry point: bot de ofertas — escucha Telegram y publica ofertas al canal privado.
+
+Multi-fuente: enruta cada mensaje por OfferPipeline. Hoy los handlers son Amazon
+(retag + post estilo Lanny) y Shopee (reenvío a revisar); Mercado Livre se descarta.
 
 Uso:
-    python run_amazon.py            # corre el pipeline
-    python run_amazon.py --observe  # modo diagnóstico: loguea cada mensaje y su chat_id
+    python run_ofertas.py            # corre el pipeline
+    python run_ofertas.py --observe  # modo diagnóstico: loguea cada mensaje y su chat_id
 
-Requiere AMAZON_TAG en el .env (tu tag de afiliado de Amazon). Sin eso el bot
-no puede armar posts monetizados, así que no arranca.
+Requiere AMAZON_TAG en el .env porque el handler de Amazon es el que monetiza; sin
+eso no arranca.
 """
 import asyncio
 import logging
 import sys
 
 from src.amazon_pipeline import AmazonPipeline
+from src.offer_pipeline import OfferPipeline
+from src.shopee_review import ShopeeReviewPipeline
 from src.channel_poster import ChannelPoster
 from src.config import load_config
 from src.post_builder import HookBank
 from src.telegram_listener import TelethonConfig, TelethonListener
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("amazon-bot")
+logger = logging.getLogger("ofertas-bot")
 
 
 def _is_numeric(value) -> bool:
@@ -53,7 +57,7 @@ async def main() -> None:
 
     if not cfg["amazon_tag"]:
         logger.error(
-            "Falta AMAZON_TAG en el .env: no se puede correr el bot de Amazon sin un tag de afiliado."
+            "Falta AMAZON_TAG en el .env: el handler de Amazon necesita tu tag de afiliado, así que el bot no arranca."
         )
         return
 
@@ -96,10 +100,12 @@ async def main() -> None:
     # pipeline is assigned.
     poster = ChannelPoster(listener._client, target)
     hookbank = HookBank.from_file(cfg["hooks_file"])
-    pipeline_holder["pipeline"] = AmazonPipeline(cfg["amazon_tag"], poster, hookbank)
+    amazon = AmazonPipeline(cfg["amazon_tag"], poster, hookbank)
+    shopee_review = ShopeeReviewPipeline(poster)
+    pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review])
 
     logger.info(
-        "Bot Amazon listo. tag=%s source_chats=%s target=%s (observe=%s)",
+        "Bot de ofertas listo. amazon_tag=%s source_chats=%s target=%s (observe=%s)",
         cfg["amazon_tag"], cfg["source_chats"], target, observe,
     )
     logger.info("Escuchando Telegram... (observe=%s)", observe)
