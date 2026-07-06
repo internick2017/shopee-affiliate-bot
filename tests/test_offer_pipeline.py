@@ -90,3 +90,30 @@ def test_integration_amazon_message_builds_lanny_not_shopee():
     assert len(poster.posts) == 1
     assert "Heinz Maionese Alho Tostado Com Ervas 215g" in poster.posts[0]
     assert not poster.posts[0].startswith(DEFAULT_MARKER)
+
+
+def test_raising_handler_is_isolated_and_next_handler_runs():
+    class RaisingHandler:
+        def __init__(self):
+            self.calls = 0
+
+        async def handle(self, text, chat_title=None):
+            self.calls += 1
+            raise RuntimeError("boom")
+
+    raising = RaisingHandler()
+    good = FakeHandler(1, "good")
+    pipe = OfferPipeline([raising, good])
+    n = asyncio.run(pipe.handle("x"))
+    assert n == 1
+    assert raising.calls == 1
+    assert good.calls == 1
+
+
+def test_all_handlers_raise_returns_zero():
+    class RaisingHandler:
+        async def handle(self, text, chat_title=None):
+            raise RuntimeError("boom")
+
+    pipe = OfferPipeline([RaisingHandler(), RaisingHandler()])
+    assert asyncio.run(pipe.handle("x")) == 0

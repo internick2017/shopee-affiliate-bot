@@ -13,7 +13,14 @@ class OfferPipeline:
 
     async def handle(self, text, chat_title=None) -> int:
         for handler in self._handlers:
-            n = await handler.handle(text, chat_title)
+            try:
+                n = await handler.handle(text, chat_title)
+            except Exception:
+                logger.exception(
+                    "Handler %s falló procesando un mensaje; se prueba el siguiente",
+                    type(handler).__name__,
+                )
+                continue
             if n:
                 return n
         return 0
