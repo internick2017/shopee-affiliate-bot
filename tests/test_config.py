@@ -36,3 +36,24 @@ def test_non_numeric_channel_id_stays_string(monkeypatch):
     cfg = config.load_config()
 
     assert cfg["channel_id"] == "@meucanal"
+
+
+def test_shopee_channel_id_read_by_name(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("SHOPEE_CHANNEL_ID", "Ofertas Shopee")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["shopee_channel_id"] == "Ofertas Shopee"
+
+
+def test_shopee_channel_id_absent_is_none(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("SHOPEE_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["shopee_channel_id"] is None

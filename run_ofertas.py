@@ -85,28 +85,48 @@ async def main() -> None:
     listener = TelethonListener(tel_cfg, on_text)
     await listener.start()
 
-    target = await _resolve_target(listener, cfg["channel_id"])
-    if target is None:
+    amazon_target = await _resolve_target(listener, cfg["channel_id"])
+    if amazon_target is None:
         logger.error(
             "No se encontró ningún canal cuyo nombre contenga %r. Revisa TARGET_CHANNEL_ID.",
             cfg["channel_id"],
         )
         return
 
+    # Cada plataforma publica en su propio canal. Shopee -> "Ofertas Shopee"
+    # (SHOPEE_CHANNEL_ID). Si no está configurado, cae al canal principal para
+    # no perder los mensajes; si está pero no se resuelve, no arranca (evita
+    # mandar Shopee al canal equivocado en silencio).
+    shopee_target = amazon_target
+    if cfg["shopee_channel_id"]:
+        shopee_target = await _resolve_target(listener, cfg["shopee_channel_id"])
+        if shopee_target is None:
+            logger.error(
+                "No se encontró ningún canal cuyo nombre contenga %r. Revisa SHOPEE_CHANNEL_ID.",
+                cfg["shopee_channel_id"],
+            )
+            return
+    else:
+        logger.warning(
+            "SHOPEE_CHANNEL_ID no está seteado: las ofertas de Shopee irán al canal principal (%r).",
+            cfg["channel_id"],
+        )
+
     # Build the pipeline ONCE and reuse it for the life of the process, same
     # rationale as run.py: avoid rebuilding stateful components per message.
-    # No `await` happens between resolving `target` and populating
-    # pipeline_holder, so no queued message can reach on_text before the
-    # pipeline is assigned.
-    poster = ChannelPoster(listener._client, target)
+    # Todos los `await` (resolución de canales) ya ocurrieron arriba; de acá a
+    # poblar pipeline_holder no hay await, así que ningún mensaje encolado llega
+    # a on_text antes de que el pipeline esté asignado.
+    amazon_poster = ChannelPoster(listener._client, amazon_target)
+    shopee_poster = ChannelPoster(listener._client, shopee_target)
     hookbank = HookBank.from_file(cfg["hooks_file"])
-    amazon = AmazonPipeline(cfg["amazon_tag"], poster, hookbank)
-    shopee_review = ShopeeReviewPipeline(poster)
+    amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank)
+    shopee_review = ShopeeReviewPipeline(shopee_poster)
     pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review])
 
     logger.info(
-        "Bot de ofertas listo. amazon_tag=%s source_chats=%s target=%s (observe=%s)",
-        cfg["amazon_tag"], cfg["source_chats"], target, observe,
+        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s shopee_channel=%s (observe=%s)",
+        cfg["amazon_tag"], cfg["source_chats"], amazon_target, shopee_target, observe,
     )
     logger.info("Escuchando Telegram... (observe=%s)", observe)
     await listener.run_until_disconnected()
