@@ -50,3 +50,15 @@ def test_is_price_line_false_cases():
 def test_is_coupon_line():
     assert is_coupon_line("10% OFF a partir de R$300")
     assert not is_coupon_line("R$ 19 no pix")
+
+
+def test_extract_price_trailing_comma():
+    assert extract_price("🔥 DE 13,59 | POR 9,16, corre!") == (Decimal("9.16"), Decimal("13.59"))
+    assert extract_price("R$ 45,90, aproveite!") == (Decimal("45.90"), None)
+
+
+def test_is_price_line_not_confused_by_de_por_words():
+    assert not is_price_line("de 5 estrelas")
+    assert not is_price_line("De 10 a 20 de julho")
+    assert is_price_line("🔥 DE 13,59 | POR 9,16")
+    assert is_price_line("🔥 POR 841,07 no Pix")

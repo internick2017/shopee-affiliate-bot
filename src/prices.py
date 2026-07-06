@@ -21,18 +21,18 @@ _PRICE_RS_RE = re.compile(r"r\$\s*([\d.,]+)", re.IGNORECASE)
 _PRICE_PLAIN_RE = re.compile(r"\b(\d[\d.,]*)\s*(?:" + _PRICE_PHRASES + r")", re.IGNORECASE)
 
 # --- Clasificación de LÍNEA (para anclar nombres) ---
-_PRICE_RS_LINE_RE = re.compile(r"r\$\s?\d", re.IGNORECASE)
+_PRICE_RS_LINE_RE = re.compile(r"r\$\s*\d", re.IGNORECASE)
 _PRICE_PLAIN_LINE_RE = re.compile(
     r"^\d[\d.,]*\s*(?:" + _PRICE_PHRASES + r")", re.IGNORECASE
 )
-_DEPOR_LINE_RE = re.compile(r"^(?:de|por)\s*[\d]", re.IGNORECASE)
+_POR_LINE_RE = re.compile(r"^por\s*[\d]", re.IGNORECASE)
 _COUPON_RE = re.compile(r"%\s*off|off em r\$", re.IGNORECASE)
 _LEADING_SYMBOLS_RE = re.compile(r"^[^0-9A-Za-zÀ-ÿ]+")
 
 
 def parse_br_number(s: str) -> Decimal:
     """Convierte un número brasileño a Decimal. "1.289,10"->1289.10 ; "2.391"->2391."""
-    s = s.strip().replace(" ", "")
+    s = s.strip().replace(" ", "").strip(".,")
     if "," in s:
         s = s.replace(".", "").replace(",", ".")
     else:
@@ -61,7 +61,9 @@ def is_price_line(line: str) -> bool:
     core = _strip_leading_symbols(line).strip()
     if _PRICE_PLAIN_LINE_RE.match(core):
         return True
-    if _DEPOR_LINE_RE.match(core):
+    if _DISCOUNT_NORS_RE.search(core):   # "DE x | POR y" pair
+        return True
+    if _POR_LINE_RE.match(core):         # single "POR y ..." line
         return True
     return False
 
