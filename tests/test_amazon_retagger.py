@@ -1,6 +1,7 @@
 from src.amazon_retagger import (
     build_amazon_post,
     extract_amazon_links,
+    extract_asin,
     has_mercadolivre_links,
     retag_amazon_url,
 )
@@ -70,3 +71,21 @@ def test_build_amazon_post_skips_mercadolivre():
 
 def test_build_amazon_post_no_links():
     assert build_amazon_post("Bom dia, sem ofertas", TAG) is None
+
+
+def test_extract_asin_from_dp_url():
+    assert extract_asin("https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=x-20") == "B0F8BQ3KYW"
+
+
+def test_extract_asin_from_gp_product_url():
+    assert extract_asin("https://www.amazon.com.br/gp/product/B07QHKCG9N") == "B07QHKCG9N"
+
+
+def test_extract_asin_from_slug_url():
+    url = "https://www.amazon.com.br/Espuma-Magica-Limpador-400ml/dp/B076X7T368"
+    assert extract_asin(url) == "B076X7T368"
+
+
+def test_extract_asin_none_when_no_product():
+    # link a la home (post de cupón), sin producto
+    assert extract_asin("https://www.amazon.com.br/?linkCode=sl2&tag=crowmantech-20") is None

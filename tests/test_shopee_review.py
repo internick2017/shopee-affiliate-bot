@@ -4,6 +4,7 @@ from src.shopee_review import (
     DEFAULT_MARKER,
     has_shopee_links,
     build_shopee_review_message,
+    shopee_dedup_key,
     ShopeeReviewPipeline,
 )
 
@@ -73,3 +74,53 @@ def test_pipeline_skips_when_no_shopee():
     n = asyncio.run(pipe.handle("https://www.amazon.com.br/dp/X"))
     assert n == 0
     assert poster.posts == []
+
+
+# --- dedup ---
+
+class _FakeDedup:
+    def __init__(self):
+        self.keys = {}
+
+    def seen(self, key):
+        return key in self.keys
+
+    def mark(self, key):
+        self.keys[key] = True
+
+
+def test_shopee_dedup_key_ignores_query_params():
+    a = shopee_dedup_key("🔗 https://s.shopee.com.br/8V77TB32CU")
+    b = shopee_dedup_key("outro texto\n🔗 https://s.shopee.com.br/8V77TB32CU?lp=aff")
+    assert a is not None and a == b
+
+
+def test_shopee_dedup_key_none_without_links():
+    assert shopee_dedup_key("sem shopee") is None
+
+
+def test_shopee_dedup_key_differs_per_product():
+    a = shopee_dedup_key("https://s.shopee.com.br/8V77TB32CU")
+    b = shopee_dedup_key("https://s.shopee.com.br/2LWZxIxStA")
+    assert a != b
+
+
+def test_pipeline_skips_duplicate_shopee_offer():
+    poster = FakePoster()
+    dedup = _FakeDedup()
+    pipe = ShopeeReviewPipeline(poster, dedup=dedup)
+
+    assert asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc")) == 1
+    assert len(poster.posts) == 1
+
+    # mismo link, otro grupo, con query param extra
+    assert asyncio.run(pipe.handle("outro\n🔗 https://s.shopee.com.br/abc?lp=aff")) == 1
+    assert len(poster.posts) == 1
+
+
+def test_pipeline_without_dedup_forwards_twice():
+    poster = FakePoster()
+    pipe = ShopeeReviewPipeline(poster)
+    asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc"))
+    asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc"))
+    assert len(poster.posts) == 2

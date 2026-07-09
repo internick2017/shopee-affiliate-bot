@@ -19,6 +19,7 @@ from src.offer_pipeline import OfferPipeline
 from src.shopee_review import ShopeeReviewPipeline
 from src.channel_poster import ChannelPoster
 from src.config import load_config
+from src.dedup_store import DedupStore
 from src.post_builder import HookBank
 from src.telegram_listener import TelethonConfig, TelethonListener
 
@@ -120,13 +121,18 @@ async def main() -> None:
     amazon_poster = ChannelPoster(listener._client, amazon_target)
     shopee_poster = ChannelPoster(listener._client, shopee_target)
     hookbank = HookBank.from_file(cfg["hooks_file"])
-    amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank)
-    shopee_review = ShopeeReviewPipeline(shopee_poster)
+    # Un solo store compartido por todos los handlers: los grupos fuente se copian
+    # ofertas entre sí, así que el mismo producto llega varias veces. Las claves
+    # llevan prefijo de plataforma, así que no colisionan entre handlers.
+    dedup = DedupStore(cfg["dedup_db"])
+    amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
+    shopee_review = ShopeeReviewPipeline(shopee_poster, dedup=dedup)
     pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review])
 
     logger.info(
-        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s shopee_channel=%s (observe=%s)",
-        cfg["amazon_tag"], cfg["source_chats"], amazon_target, shopee_target, observe,
+        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s shopee_channel=%s dedup_db=%s (observe=%s)",
+        cfg["amazon_tag"], cfg["source_chats"], amazon_target, shopee_target,
+        cfg["dedup_db"], observe,
     )
     logger.info("Escuchando Telegram... (observe=%s)", observe)
     await listener.run_until_disconnected()

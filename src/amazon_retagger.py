@@ -6,12 +6,26 @@ _AMAZON_RE = re.compile(r"https?://(?:[\w-]+\.)*amazon\.com\.br/\S+")
 _MERCADOLIVRE_MARKERS = ("meli.la/", "mercadolivre.com")
 _FOOTER_MARKERS = ("grupos de promos", "ctlinks.com.br")
 
+# El ASIN identifica al producto: 10 caracteres alfanuméricos en mayúscula tras
+# /dp/ o /gp/product/. Es la clave estable para deduplicar entre grupos, porque
+# el mismo producto llega con query params distintos según quién lo postee.
+_ASIN_RE = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})(?:[/?]|$)")
+
 
 def extract_amazon_links(text: Optional[str]) -> List[str]:
     """Devuelve todos los links de Amazon Brasil (amazon.com.br/...) en el texto."""
     if not text:
         return []
     return _AMAZON_RE.findall(text)
+
+
+def extract_asin(url: Optional[str]) -> Optional[str]:
+    """Devuelve el ASIN de una URL de producto de Amazon, o None si la URL no
+    apunta a un producto (p. ej. un link a la home en un post de cupón)."""
+    if not url:
+        return None
+    match = _ASIN_RE.search(url)
+    return match.group(1) if match else None
 
 
 def retag_amazon_url(url: str, tag: str) -> str:
