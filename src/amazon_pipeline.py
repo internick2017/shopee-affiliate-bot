@@ -1,7 +1,9 @@
+import asyncio
 import logging
 from typing import Optional
 
 from .amazon_retagger import extract_amazon_links, extract_asin
+from .amazon_shortlink import expand_amazon_shortlinks, has_amazon_shortlinks
 from .lanny_post import build_lanny_amazon_post
 
 logger = logging.getLogger(__name__)
@@ -26,13 +28,29 @@ def amazon_dedup_key(text: Optional[str]) -> Optional[str]:
 class AmazonPipeline:
     """Turns a promo message into a Lanny-style Amazon post and publishes it."""
 
-    def __init__(self, tag, poster, hookbank, dedup=None):
+    def __init__(self, tag, poster, hookbank, dedup=None, expand=expand_amazon_shortlinks):
         self._tag = tag
         self._poster = poster
         self._hookbank = hookbank
         self._dedup = dedup
+        self._expand = expand
+
+    async def _expanded(self, text):
+        """Resuelve los shortlinks (`link.amazon/...`) a URLs de producto.
+
+        Solo toca la red si el mensaje trae shortlinks, y lo hace en un thread:
+        `expand` bloquea en HTTP y el listener corre en este mismo event loop.
+        """
+        if not has_amazon_shortlinks(text):
+            return text
+        return await asyncio.to_thread(self._expand, text)
 
     async def handle(self, text, chat_title=None) -> int:
+        # Antes que nada: sin resolver, un `link.amazon/...` no matchea
+        # `amazon.com.br` y el mensaje se descartaría. También hace falta para
+        # conocer el ASIN, que es la clave de dedup.
+        text = await self._expanded(text)
+
         # La clave se calcula ANTES de armar el post: `hookbank.next()` consume un
         # gancho, y un duplicado no debe gastarlo.
         key = amazon_dedup_key(text)

@@ -45,8 +45,20 @@ def _strip_leading_symbols(line: str) -> str:
 
 
 def is_coupon_line(line: str) -> bool:
-    """True si la línea es un cupón / "% OFF" (no un precio de producto)."""
-    return bool(_COUPON_RE.search(line or ""))
+    """True si la línea anuncia un cupón / "% OFF" en vez del precio de un producto.
+
+    Un "% off" no basta: Promocasinha escribe "Por: R$ 6,66 (44% off)", donde el
+    porcentaje es una insignia detrás del precio. Lo que decide es el orden — si
+    el precio viene primero, la línea es un precio; si el "% off" viene primero
+    ("10% OFF a partir de R$300"), es un cupón.
+    """
+    coupon_match = _COUPON_RE.search(line or "")
+    if not coupon_match:
+        return False
+    price_match = _PRICE_RS_LINE_RE.search(line)
+    if price_match and price_match.start() < coupon_match.start():
+        return False
+    return True
 
 
 def is_price_line(line: str) -> bool:

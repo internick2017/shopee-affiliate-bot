@@ -62,3 +62,28 @@ def test_is_price_line_not_confused_by_de_por_words():
     assert not is_price_line("De 10 a 20 de julho")
     assert is_price_line("🔥 DE 13,59 | POR 9,16")
     assert is_price_line("🔥 POR 841,07 no Pix")
+
+
+# --- Promocasinha: precio con insignia de descuento ---
+
+def test_price_line_with_discount_badge():
+    """'Por: R$ 6,66 (44% off)' es un PRECIO con insignia, no una línea de cupón."""
+    assert is_price_line("Por: R$ 6,66 (44% off)")
+    assert is_price_line("Por: R$ 18,94 (39% OFF)")
+    assert is_price_line("Por: R$ 66,51 à vista (40%OFF)")
+
+
+def test_discount_badge_is_not_a_coupon_line():
+    assert not is_coupon_line("Por: R$ 6,66 (44% off)")
+    assert not is_coupon_line("Por: R$ 66,51 à vista (40%OFF)")
+
+
+def test_coupon_line_still_detected_when_percent_comes_first():
+    """El %OFF antes del precio sigue siendo cupón (post 'primeday' de IAchados)."""
+    assert is_coupon_line("➡️ 10% OFF a partir de R$300, limitado a R$100 OFF")
+    assert not is_price_line("➡️ 10% OFF a partir de R$300, limitado a R$100 OFF")
+
+
+def test_extract_price_ignores_discount_badge_percentage():
+    """El 44 de '(44% off)' no debe confundirse con el precio."""
+    assert extract_price("Por: R$ 6,66 (44% off)") == (Decimal("6.66"), None)

@@ -161,3 +161,81 @@ async def test_works_without_dedup():
     await pipeline.handle(AMAZON_TEXT, "Crowman")
     await pipeline.handle(AMAZON_TEXT_OTRO_GRUPO, "IAchados")
     assert len(poster.posts) == 2
+
+
+# --- shortlinks (Promocasinha) ---
+
+PROMOCASINHA_TEXT = (
+    "Espuma Mágica Aerossol 400ml / 370g\n"
+    " \n"
+    "Por: R$ 16,90\n"
+    "\n"
+    "Amazon:\n"
+    "Compre em: https://link.amazon/B0iFvhSgZ\n"
+    "\n"
+    "Promoção por tempo limitado."
+)
+
+
+def _fake_expand(resuelto):
+    def expand(text, **kwargs):
+        return text.replace("https://link.amazon/B0iFvhSgZ", resuelto)
+
+    return expand
+
+
+async def test_resolves_shortlink_and_posts():
+    poster = _FakePoster()
+    pipeline = AmazonPipeline(
+        TAG, poster, HookBank([HOOK]),
+        expand=_fake_expand("https://www.amazon.com.br/dp/B076X7T368"),
+    )
+
+    assert await pipeline.handle(PROMOCASINHA_TEXT, "Promocasinha") == 1
+    assert len(poster.posts) == 1
+    assert "Espuma Mágica Aerossol 400ml / 370g" in poster.posts[0]
+    assert "R$ 16,90" in poster.posts[0]
+    assert f"dp/B076X7T368?tag={TAG}" in poster.posts[0]
+    assert "link.amazon" not in poster.posts[0]
+
+
+async def test_unresolvable_shortlink_is_dropped():
+    """Si el shortlink no resuelve, el texto queda igual y no hay link de Amazon."""
+    poster = _FakePoster()
+    pipeline = AmazonPipeline(
+        TAG, poster, HookBank([HOOK]), expand=lambda text, **kw: text
+    )
+
+    assert await pipeline.handle(PROMOCASINHA_TEXT, "Promocasinha") == 0
+    assert poster.posts == []
+
+
+async def test_shortlink_dedups_by_resolved_asin():
+    """El mismo producto vía shortlink (Promocasinha) y vía link directo (Crowman)."""
+    poster = _FakePoster()
+    dedup = _FakeDedup()
+    pipeline = AmazonPipeline(
+        TAG, poster, HookBank([HOOK]), dedup=dedup,
+        expand=_fake_expand("https://www.amazon.com.br/dp/B076X7T368"),
+    )
+
+    directo = (
+        "Espuma Mágica Aerossol 400ml / 370g\n"
+        "🔥 R$ 11,83 à vista\n"
+        "🛍 https://www.amazon.com.br/dp/B076X7T368?tag=crowmantech-20"
+    )
+
+    assert await pipeline.handle(directo, "Crowman") == 1
+    assert await pipeline.handle(PROMOCASINHA_TEXT, "Promocasinha") == 1
+    assert len(poster.posts) == 1  # el segundo es el mismo ASIN
+
+
+async def test_no_network_when_no_shortlink():
+    """Un mensaje sin shortlink no debe tocar la red."""
+    def _boom(text, **kw):
+        raise AssertionError("no debería resolverse nada")
+
+    poster = _FakePoster()
+    pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), expand=_boom)
+    assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
+    assert len(poster.posts) == 1
