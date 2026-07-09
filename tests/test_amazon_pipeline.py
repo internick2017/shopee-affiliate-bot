@@ -239,3 +239,36 @@ async def test_no_network_when_no_shortlink():
     pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), expand=_boom)
     assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
     assert len(poster.posts) == 1
+
+
+# --- foto del mensaje original ---
+
+class _FakePhotoPoster(_FakePoster):
+    def __init__(self):
+        super().__init__()
+        self.files = []
+
+    async def post(self, image, text):
+        self.files.append((image, text))
+
+
+async def test_post_carries_source_photo():
+    poster = _FakePhotoPoster()
+    pipeline = _pipeline(poster)
+    photo = object()
+
+    assert await pipeline.handle(AMAZON_TEXT, "Crowman", photo=photo) == 1
+
+    assert poster.posts == []
+    assert len(poster.files) == 1
+    imagen, texto = poster.files[0]
+    assert imagen is photo
+    assert "Smirnoff Vodka 600Ml" in texto
+
+
+async def test_post_without_photo_still_text_only():
+    poster = _FakePhotoPoster()
+    pipeline = _pipeline(poster)
+    assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
+    assert poster.files == []
+    assert len(poster.posts) == 1

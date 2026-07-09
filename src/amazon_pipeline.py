@@ -5,6 +5,7 @@ from typing import Optional
 from .amazon_retagger import extract_amazon_links, extract_asin
 from .amazon_shortlink import expand_amazon_shortlinks, has_amazon_shortlinks
 from .lanny_post import build_lanny_amazon_post
+from .posting import post_offer
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class AmazonPipeline:
             return text
         return await asyncio.to_thread(self._expand, text)
 
-    async def handle(self, text, chat_title=None) -> int:
+    async def handle(self, text, chat_title=None, photo=None) -> int:
         # Antes que nada: sin resolver, un `link.amazon/...` no matchea
         # `amazon.com.br` y el mensaje se descartaría. También hace falta para
         # conocer el ASIN, que es la clave de dedup.
@@ -63,7 +64,7 @@ class AmazonPipeline:
         post = build_lanny_amazon_post(text, self._tag, self._hookbank.next())
         if not post:
             return 0
-        await self._poster.post_text(post)
+        await post_offer(self._poster, post, photo)
         # Solo se marca tras postear: si el post no se pudo armar, el producto
         # sigue disponible para cuando llegue un mensaje mejor formado.
         if key and self._dedup:

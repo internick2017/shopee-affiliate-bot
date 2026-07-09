@@ -44,7 +44,9 @@ async def main() -> None:
     # queued message (see note below).
     pipeline_holder = {}
 
-    async def on_text(text, chat_title=None):
+    async def on_text(text, chat_title=None, photo=None):
+        # El pipeline viejo de Shopee arma su propio post con la imagen que devuelve
+        # la API, así que ignora la foto del mensaje original.
         pipeline = pipeline_holder.get("pipeline")
         if pipeline is None:
             return

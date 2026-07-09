@@ -103,11 +103,11 @@ async def main() -> None:
     # listener.start() returns. Same pattern as run.py.
     pipeline_holder = {}
 
-    async def on_text(text, chat_title=None):
+    async def on_text(text, chat_title=None, photo=None):
         pipeline = pipeline_holder.get("pipeline")
         if pipeline is None:
             return
-        await pipeline.handle(text, chat_title)
+        await pipeline.handle(text, chat_title, photo=photo)
 
     tel_cfg = TelethonConfig(
         session_name="shopee_user_session",

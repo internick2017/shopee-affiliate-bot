@@ -172,8 +172,10 @@ class TelethonListener:
                 if not in_scope:
                     return
                 # Pass chat_title so the pipeline can decide how to handle the
-                # message based on its source chat.
-                await self.on_text(text, chat_title)
+                # message based on its source chat, and the photo so the post sale
+                # ilustrado: los canales fuente siempre postean con imagen, y
+                # reenviarla por referencia evita descargarla y volverla a subir.
+                await self.on_text(text, chat_title, photo=getattr(msg, "photo", None))
             except Exception as exc:
                 logger.error(
                     "Telethon handler error: %s", exc, exc_info=True

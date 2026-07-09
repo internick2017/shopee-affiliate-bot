@@ -11,10 +11,10 @@ class OfferPipeline:
     def __init__(self, handlers):
         self._handlers = list(handlers)
 
-    async def handle(self, text, chat_title=None) -> int:
+    async def handle(self, text, chat_title=None, photo=None) -> int:
         for handler in self._handlers:
             try:
-                n = await handler.handle(text, chat_title)
+                n = await handler.handle(text, chat_title, photo=photo)
             except Exception:
                 logger.exception(
                     "Handler %s falló procesando un mensaje; se prueba el siguiente",

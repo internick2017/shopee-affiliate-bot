@@ -11,9 +11,11 @@ class FakeHandler:
         self.ret = ret
         self.name = name
         self.calls = 0
+        self.photos = []
 
-    async def handle(self, text, chat_title=None):
+    async def handle(self, text, chat_title=None, photo=None):
         self.calls += 1
+        self.photos.append(photo)
         return self.ret
 
 
@@ -97,7 +99,7 @@ def test_raising_handler_is_isolated_and_next_handler_runs():
         def __init__(self):
             self.calls = 0
 
-        async def handle(self, text, chat_title=None):
+        async def handle(self, text, chat_title=None, photo=None):
             self.calls += 1
             raise RuntimeError("boom")
 
@@ -112,7 +114,7 @@ def test_raising_handler_is_isolated_and_next_handler_runs():
 
 def test_all_handlers_raise_returns_zero():
     class RaisingHandler:
-        async def handle(self, text, chat_title=None):
+        async def handle(self, text, chat_title=None, photo=None):
             raise RuntimeError("boom")
 
     pipe = OfferPipeline([RaisingHandler(), RaisingHandler()])

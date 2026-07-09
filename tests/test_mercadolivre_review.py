@@ -122,3 +122,26 @@ def test_pipeline_skips_duplicate():
     assert asyncio.run(pipe.handle(PROMOCASINHA_ML)) == 1
     assert asyncio.run(pipe.handle(PROMOCASINHA_ML)) == 1
     assert len(poster.posts) == 1
+
+
+class FakePhotoPoster(FakePoster):
+    def __init__(self):
+        super().__init__()
+        self.files = []
+
+    async def post(self, image, text):
+        self.files.append((image, text))
+
+
+def test_forward_carries_source_photo():
+    poster = FakePhotoPoster()
+    pipe = MercadoLivreReviewPipeline(poster)
+    photo = object()
+
+    assert asyncio.run(pipe.handle(PROMOCASINHA_ML, photo=photo)) == 1
+
+    assert poster.posts == []
+    assert len(poster.files) == 1
+    imagen, texto = poster.files[0]
+    assert imagen is photo
+    assert texto.startswith(DEFAULT_MARKER)

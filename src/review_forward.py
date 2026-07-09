@@ -12,6 +12,8 @@ import logging
 import re
 from typing import Optional
 
+from .posting import post_offer
+
 logger = logging.getLogger(__name__)
 
 # Footer del competidor: mismos marcadores que usa amazon_retagger.
@@ -72,7 +74,7 @@ class ReviewPipeline:
     def dedup_key(self, text) -> Optional[str]:
         return review_dedup_key(text, self._link_re, self._prefix)
 
-    async def handle(self, text, chat_title=None) -> int:
+    async def handle(self, text, chat_title=None, photo=None) -> int:
         key = self.dedup_key(text)
         if key and self._dedup and self._dedup.seen(key):
             logger.info("Oferta de %s ya reenviada (%s); se omite", self._platform, key)
@@ -81,7 +83,7 @@ class ReviewPipeline:
         msg = build_review_message(text, self._link_re, self._marker)
         if not msg:
             return 0
-        await self._poster.post_text(msg)
+        await post_offer(self._poster, msg, photo)
         if key and self._dedup:
             self._dedup.mark(key)
         logger.info("Oferta de %s reenviada al canal para revisar", self._platform)
