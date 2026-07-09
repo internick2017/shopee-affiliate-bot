@@ -31,8 +31,9 @@ Setup (first run)
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Optional, Sequence
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class TelethonConfig:
     observe: bool = False
     # When set (and observe=True), append messages as one JSON line to this
     # file (full text + chat + timestamp) for multi-day review. Survives restarts.
-    observe_file: Optional[str] = None
+    observe_file: str | None = None
     # If True, the observe_file only records IN-SCOPE messages (the source
     # group(s) we actually care about), skipping unrelated chats. Keeps the
     # log focused on the relevant chats so we can audit why processing failed.
@@ -102,14 +103,17 @@ class TelethonListener:
     def __init__(
         self,
         config: TelethonConfig,
-        on_text: Callable[[str, Optional[str]], Awaitable[None]],
+        on_text: Callable[[str, str | None], Awaitable[None]],
     ) -> None:
         self.config = config
         self.on_text = on_text
-        self._client = None
+        # `Any` y no `TelegramClient`: telethon se importa perezosamente dentro de
+        # `start()`, así que el tipo no existe acá arriba.
+        self._client: Any = None
 
     async def start(self) -> None:
         import os
+
         from telethon import TelegramClient, events  # lazy
         from telethon.sessions import StringSession
 
@@ -128,7 +132,7 @@ class TelethonListener:
         session_string = ""
         if os.path.exists(session_file):
             try:
-                with open(session_file, "r", encoding="utf-8") as fh:
+                with open(session_file, encoding="utf-8") as fh:
                     session_string = fh.read().strip()
             except Exception as exc:
                 logger.warning("Could not read session file %s: %s", session_file, exc)

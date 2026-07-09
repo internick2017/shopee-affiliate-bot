@@ -1,7 +1,6 @@
 import random
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional, Union
 
 from .models import Product
 
@@ -43,14 +42,14 @@ def build_post(product: Product, hook: str) -> str:
 class HookBank:
     """Banco de ganchos rotativos. Elige uno al azar sin repetir el último."""
 
-    def __init__(self, hooks: List[str]):
+    def __init__(self, hooks: list[str]):
         if not hooks:
             raise ValueError("El banco de ganchos está vacío.")
         self._hooks = list(hooks)
-        self._last: Optional[str] = None
+        self._last: str | None = None
 
     @classmethod
-    def from_file(cls, path: Union[str, Path]) -> "HookBank":
+    def from_file(cls, path: str | Path) -> "HookBank":
         lines = [
             line.strip()
             for line in Path(path).read_text(encoding="utf-8").splitlines()

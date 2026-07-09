@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from .amazon_retagger import retag_amazon_url
 from .models import Product
@@ -32,12 +31,12 @@ def build_post_from_offer(offer: Offer, tag: str, hook: str) -> str:
     return build_post(product, hook)
 
 
-def build_lanny_posts(text: str, tag: str, hook: str) -> List[str]:
+def build_lanny_posts(text: str, tag: str, hook: str) -> list[str]:
     """Un post por cada oferta de Amazon del mensaje (los canales postean varias)."""
     return [build_post_from_offer(offer, tag, hook) for offer in extract_offers(text)]
 
 
-def build_lanny_amazon_post(text: str, tag: str, hook: str) -> Optional[str]:
+def build_lanny_amazon_post(text: str, tag: str, hook: str) -> str | None:
     """El post de la primera oferta del mensaje, o None si no hay ninguna.
 
     Se conserva para el código que solo espera un post; `AmazonPipeline` usa

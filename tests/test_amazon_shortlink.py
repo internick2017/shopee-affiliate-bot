@@ -1,4 +1,3 @@
-import pytest
 
 from src.amazon_shortlink import (
     expand_amazon_shortlinks,

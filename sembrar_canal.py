@@ -46,7 +46,7 @@ async def main() -> None:
 
     session_string = ""
     if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r", encoding="utf-8") as fh:
+        with open(SESSION_FILE, encoding="utf-8") as fh:
             session_string = fh.read().strip()
 
     client = TelegramClient(StringSession(session_string), int(api_id), api_hash)
@@ -59,9 +59,13 @@ async def main() -> None:
         if source_entity is None and source.lower() in name:
             source_entity = d.entity
         if target_entity is None:
-            if _is_numeric(target) and d.id == int(target):
-                target_entity = d.entity
-            elif not _is_numeric(target) and target.lower() in name:
+            # El destino se da por id numérico o por nombre, nunca por los dos.
+            matches = (
+                d.id == int(target)
+                if _is_numeric(target)
+                else target.lower() in name
+            )
+            if matches:
                 target_entity = d.entity
 
     if source_entity is None:

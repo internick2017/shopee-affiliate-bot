@@ -10,8 +10,11 @@ link a mano.
 
 ## Cómo funciona
 
-Cada mensaje recorre una lista ordenada de handlers y lo atiende el primero que lo
-reclama (`src/offer_pipeline.py`). El que no reclama nadie se descarta.
+Cada mensaje se le ofrece a **todos** los handlers, no al primero que lo reclama
+(`src/offer_pipeline.py`): un mensaje de Crowman trae un bloque de Amazon y otro de
+Mercado Livre, y si el primer handler se lo quedara entero se perderían los demás
+productos. Cada handler reclama por su propio dominio de links, así que no se pisan.
+El mensaje que no reclama nadie se descarta.
 
 | Handler | Detecta | Qué hace | Canal |
 |---|---|---|---|
@@ -22,12 +25,22 @@ reclama (`src/offer_pipeline.py`). El que no reclama nadie se descarta.
 Detalles que no se ven en la tabla:
 
 - **Fotos.** El post lleva la imagen del mensaje original, reenviada por referencia.
+- **Un canal, sus productos.** En un mensaje mixto, el reenvío a Shopee/ML descarta los
+  bloques de las otras plataformas: si no, el canal de ML recibiría los productos de
+  Amazon —ya monetizados en su canal— con el tag de afiliado del competidor intacto.
 - **Sin repetidos.** Los canales fuente se copian ofertas entre sí. `DedupStore` recuerda
   cada producto 7 días (Amazon por ASIN, el resto por link) y no lo vuelve a publicar.
+  La clave se reserva con `claim()` antes de postear, de forma atómica, así que dos
+  mensajes concurrentes con la misma oferta no la publican los dos. Si el post falla, se
+  libera y se reintenta.
 - **Shortlinks de Amazon.** `link.amazon/XXXX` no lleva el ASIN en la URL: el bot sigue el
   redirect y canonicaliza a `dp/{ASIN}`, descartando la atribución del afiliado de origen.
 - **Precios.** Todo el parsing vive en `src/prices.py`. Entiende `De R$ 408 por R$ 167`,
   `DE 13,59 | POR 9,16`, `Por: R$ 6,66 (44% off)` y `28,99 à vista`.
+- **Links.** Todas las regexes de URL viven en `src/links.py`, igual que los precios en
+  `prices.py`. Es lo que le permite a un handler saber qué links son de otra plataforma.
+- **Rate limit.** Ante un `FloodWait` de Telegram, `ChannelPoster` espera y reintenta, en
+  vez de perder la oferta. Si Telegram pide más de 5 minutos, no bloquea el bot.
 
 ## Setup
 
@@ -64,11 +77,21 @@ formato de precio o de link falta cubrir.
 
 ## Tests
 
-`python -m pytest`
+```bash
+pip install -r requirements-dev.txt
+pytest -q       # los tests
+ruff check .    # estilo
+mypy src        # tipos
+```
 
-## `run.py` (obsoleto)
+Las tres cosas corren en CI (`.github/workflows/ci.yml`) en cada push y PR.
+`ruff format` está configurado pero todavía no aplicado: reformatearía casi todo el
+repo, así que conviene hacerlo en un commit propio antes de sumarlo al CI.
 
-Es el pipeline original, que consultaba la API de afiliado de Shopee para armar el post.
-Quedó sin terminar (`RealShopeeClient.fetch` es un `NotImplementedError`) y **no es el
-bot que corre hoy**. Se conserva por la integración con la API, que se retomará cuando
-haya credenciales de Shopee.
+## Shopee automatizado (pendiente)
+
+Hoy las ofertas de Shopee se reenvían marcadas para armar el link a mano. Monetizarlas
+solas necesita la Affiliate Open API, bloqueada por credenciales. El primer intento
+(`run.py` + `src/pipeline.py` + `src/shopee_client.py`) nunca llegó a correr y se borró;
+lo que hay que saber para retomarlo —las tres formas de URL de producto, el query
+GraphQL y el plan B— está en `docs/superpowers/plans/2026-07-03-shopee-affiliate-bot.md`.

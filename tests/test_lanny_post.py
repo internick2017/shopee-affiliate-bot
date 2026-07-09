@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from src.lanny_post import _parse_br_number, extract_price, build_lanny_amazon_post
+from src.lanny_post import _parse_br_number, build_lanny_amazon_post, extract_price
 
 TAG = "ofertaslanny-20"
 

@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from dotenv import load_dotenv
 
@@ -23,7 +22,7 @@ def load_config() -> dict:
     """Carga configuración desde .env (secretos) y variables con defaults."""
     load_dotenv()
 
-    def _chats(raw: str) -> List:
+    def _chats(raw: str) -> list:
         parsed = []
         for token in (raw or "").split(","):
             token = token.strip()

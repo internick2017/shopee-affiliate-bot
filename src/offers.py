@@ -19,11 +19,10 @@ otra oferta. Publicar un precio equivocado es peor que publicar un post de menos
 import re
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Optional
 
 from .amazon_retagger import extract_amazon_links, extract_asin
 from .prices import extract_price_info, is_price_line, price_start
-from .product_name_extractor import _is_noise_line, _clean_candidate
+from .product_name_extractor import _clean_candidate, _is_noise_line
 
 _URL_RE = re.compile(r"https?://\S+")
 _LEADING_SYMBOLS_RE = re.compile(r"^[^0-9A-Za-zÀ-ÿ]+")
@@ -41,7 +40,7 @@ _MIN_NAME_LETTERS = 3
 class Offer:
     name: str
     price_final: Decimal
-    price_original: Optional[Decimal]
+    price_original: Decimal | None
     is_range: bool
     url: str
 
@@ -54,7 +53,7 @@ def _letters(text: str) -> int:
     return sum(1 for ch in text if ch.isalpha())
 
 
-def _inline_name(line: str) -> Optional[str]:
+def _inline_name(line: str) -> str | None:
     """El nombre del producto cuando comparte línea con el precio ("The Last of Us - R$ 49")."""
     start = price_start(line)
     if start is None or start == 0:
@@ -67,7 +66,7 @@ def _inline_name(line: str) -> Optional[str]:
     return _clean_candidate(candidate)
 
 
-def _name_above(lines: List[str], index: int) -> Optional[str]:
+def _name_above(lines: list[str], index: int) -> str | None:
     """La línea no-ruido más cercana por encima de `index`."""
     for j in range(index - 1, -1, -1):
         if not _is_noise_line(lines[j]):
@@ -76,7 +75,7 @@ def _name_above(lines: List[str], index: int) -> Optional[str]:
     return None
 
 
-def _variant_label(line: str) -> Optional[str]:
+def _variant_label(line: str) -> str | None:
     """La etiqueta que precede al link en su propia línea ("AA Pequena: <link>")."""
     match = _URL_RE.search(line)
     if not match:
@@ -87,7 +86,7 @@ def _variant_label(line: str) -> Optional[str]:
     return label
 
 
-def _first_amazon_link(lines: List[str]) -> Optional[str]:
+def _first_amazon_link(lines: list[str]) -> str | None:
     for line in lines:
         links = extract_amazon_links(line)
         if links:
@@ -95,11 +94,11 @@ def _first_amazon_link(lines: List[str]) -> Optional[str]:
     return None
 
 
-def _has_any_link(lines: List[str]) -> bool:
+def _has_any_link(lines: list[str]) -> bool:
     return any(_URL_RE.search(line) for line in lines)
 
 
-def _offer(name, line, url) -> Optional[Offer]:
+def _offer(name, line, url) -> Offer | None:
     final, original, is_range = extract_price_info(line)
     if final is None or not name or not extract_asin(url):
         return None
@@ -107,7 +106,7 @@ def _offer(name, line, url) -> Optional[Offer]:
                  is_range=is_range, url=url)
 
 
-def _dedupe_by_asin(offers: List[Offer]) -> List[Offer]:
+def _dedupe_by_asin(offers: list[Offer]) -> list[Offer]:
     seen, unique = set(), []
     for offer in offers:
         asin = extract_asin(offer.url)
@@ -118,7 +117,7 @@ def _dedupe_by_asin(offers: List[Offer]) -> List[Offer]:
     return unique
 
 
-def _variant_offers(lines, price_index, link_indexes) -> List[Offer]:
+def _variant_offers(lines, price_index, link_indexes) -> list[Offer]:
     """Un precio + varios links etiquetados -> una oferta por variante."""
     labels = [_variant_label(lines[i]) for i in link_indexes]
     if not all(labels):
@@ -127,7 +126,7 @@ def _variant_offers(lines, price_index, link_indexes) -> List[Offer]:
     if not base:
         return []
     offers = []
-    for i, label in zip(link_indexes, labels):
+    for i, label in zip(link_indexes, labels, strict=True):
         url = extract_amazon_links(lines[i])[0]
         offer = _offer(f"{base} — {label}", lines[price_index], url)
         if offer:
@@ -135,7 +134,7 @@ def _variant_offers(lines, price_index, link_indexes) -> List[Offer]:
     return offers
 
 
-def extract_offers(text: Optional[str]) -> List[Offer]:
+def extract_offers(text: str | None) -> list[Offer]:
     """Todas las ofertas de Amazon del mensaje, en orden de aparición."""
     if not text:
         return []

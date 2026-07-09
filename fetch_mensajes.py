@@ -22,7 +22,6 @@ import sys
 
 from dotenv import load_dotenv
 
-
 SESSION_FILE = "fetch_session.string"
 
 
@@ -43,7 +42,7 @@ async def main() -> None:
 
     session_string = ""
     if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r", encoding="utf-8") as fh:
+        with open(SESSION_FILE, encoding="utf-8") as fh:
             session_string = fh.read().strip()
 
     client = TelegramClient(StringSession(session_string), int(api_id), api_hash)

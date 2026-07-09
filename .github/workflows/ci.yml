@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      # `ruff format --check` todavía no: reformatearía 28 archivos de una. Cuando se
+      # haga, va en un commit propio y se agrega acá.
+      - name: Estilo (ruff)
+        run: ruff check .
+
+      - name: Tipos (mypy)
+        run: mypy src
+
+      - name: Tests
+        run: pytest -q

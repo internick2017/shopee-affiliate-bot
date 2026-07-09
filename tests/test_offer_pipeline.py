@@ -1,9 +1,9 @@
 import asyncio
 
-from src.offer_pipeline import OfferPipeline
 from src.amazon_pipeline import AmazonPipeline
-from src.shopee_review import ShopeeReviewPipeline, DEFAULT_MARKER
+from src.offer_pipeline import OfferPipeline
 from src.post_builder import HookBank
+from src.shopee_review import DEFAULT_MARKER, ShopeeReviewPipeline
 
 
 class FakeHandler:

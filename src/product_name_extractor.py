@@ -1,5 +1,4 @@
 import re
-from typing import List, Optional
 
 from .prices import is_price_line as _is_price_line
 
@@ -50,9 +49,7 @@ def _is_noise_line(line: str) -> bool:
         return True
     if _OFERTA_RE.search(line):
         return True
-    if _OFF_RE.search(line):
-        return True
-    return False
+    return bool(_OFF_RE.search(line))
 
 
 def _clean_candidate(line: str) -> str:
@@ -71,7 +68,7 @@ def _is_coupon_announcement(cleaned: str) -> bool:
     )
 
 
-def extract_product_names(text: Optional[str]) -> List[str]:
+def extract_product_names(text: str | None) -> list[str]:
     """Extrai candidatos de nome de produto de uma mensagem de promo bruta.
 
     Para cada linha de PREÇO (em ordem no documento), o candidato é a linha
@@ -83,7 +80,7 @@ def extract_product_names(text: Optional[str]) -> List[str]:
 
     lines = [line.strip() for line in text.split("\n")]
 
-    candidates: List[str] = []
+    candidates: list[str] = []
     seen = set()
 
     for i, line in enumerate(lines):
