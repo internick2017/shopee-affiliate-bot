@@ -1,5 +1,6 @@
 from src.amazon_pipeline import AmazonPipeline
 from src.post_builder import HookBank
+from tests.fakes import FakeDedup
 
 TAG = "ofertaslanny-20"
 HOOK = "GANCHO DE PRUEBA 🔥"
@@ -80,20 +81,10 @@ AMAZON_TEXT_OTRO_PRODUCTO = (
 )
 
 
-class _FakeDedup:
-    def __init__(self):
-        self.keys = {}
-
-    def seen(self, key):
-        return key in self.keys
-
-    def mark(self, key):
-        self.keys[key] = True
-
 
 async def test_same_asin_from_another_group_is_not_reposted():
     poster = _FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), dedup=dedup)
 
     assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
@@ -106,7 +97,7 @@ async def test_same_asin_from_another_group_is_not_reposted():
 
 async def test_different_asin_is_posted():
     poster = _FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), dedup=dedup)
 
     assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
@@ -129,7 +120,7 @@ class _CountingHookBank:
 async def test_duplicate_does_not_consume_a_hook():
     """Un duplicado no debe gastar un gancho: se descarta antes de armar el post."""
     poster = _FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     hookbank = _CountingHookBank()
     pipeline = AmazonPipeline(TAG, poster, hookbank, dedup=dedup)
 
@@ -146,7 +137,7 @@ async def test_duplicate_does_not_consume_a_hook():
 async def test_message_that_builds_no_post_is_not_marked():
     """Si no se pudo armar el post (sin precio), no se marca como visto."""
     poster = _FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), dedup=dedup)
 
     sin_precio = "Produto legal\nhttps://www.amazon.com.br/dp/B07QZB3PDY?tag=x-20"
@@ -213,7 +204,7 @@ async def test_unresolvable_shortlink_is_dropped():
 async def test_shortlink_dedups_by_resolved_asin():
     """El mismo producto vía shortlink (Promocasinha) y vía link directo (Crowman)."""
     poster = _FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     pipeline = AmazonPipeline(
         TAG, poster, HookBank([HOOK]), dedup=dedup,
         expand=_fake_expand("https://www.amazon.com.br/dp/B076X7T368"),
@@ -271,4 +262,36 @@ async def test_post_without_photo_still_text_only():
     pipeline = _pipeline(poster)
     assert await pipeline.handle(AMAZON_TEXT, "Crowman") == 1
     assert poster.files == []
+    assert len(poster.posts) == 1
+
+
+async def test_key_is_released_when_posting_fails():
+    """Un post fallido no debe dar la oferta por publicada: se reintenta después."""
+    class _BrokenPoster:
+        def __init__(self):
+            self.posts = []
+            self.fail = True
+
+        async def post_text(self, text):
+            if self.fail:
+                raise RuntimeError("Telegram caído")
+            self.posts.append(text)
+
+        async def post(self, image, text):
+            await self.post_text(text)
+
+    poster = _BrokenPoster()
+    dedup = FakeDedup()
+    pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK, HOOK]), dedup=dedup)
+
+    try:
+        await pipeline.handle(AMAZON_TEXT)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("el fallo del poster debía propagar")
+    assert dedup.keys == {}
+
+    poster.fail = False
+    assert await pipeline.handle(AMAZON_TEXT) == 1
     assert len(poster.posts) == 1

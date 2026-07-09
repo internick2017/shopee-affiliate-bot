@@ -22,13 +22,13 @@ import logging
 import sys
 
 from src.amazon_pipeline import AmazonPipeline
-from src.mercadolivre_review import MercadoLivreReviewPipeline
-from src.offer_pipeline import OfferPipeline
-from src.shopee_review import ShopeeReviewPipeline
 from src.channel_poster import ChannelPoster
 from src.config import load_config
 from src.dedup_store import DedupStore
+from src.mercadolivre_review import MercadoLivreReviewPipeline
+from src.offer_pipeline import OfferPipeline
 from src.post_builder import HookBank
+from src.shopee_review import ShopeeReviewPipeline
 from src.telegram_listener import TelethonConfig, TelethonListener
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -107,7 +107,7 @@ async def main() -> None:
     # Holder for the shared pipeline: on_text is wired into the listener at
     # construction time, but the pipeline needs the authenticated Telethon
     # client (and the resolved target channel), which only exist after
-    # listener.start() returns. Same pattern as run.py.
+    # listener.start() returns.
     pipeline_holder = {}
 
     async def on_text(text, chat_title=None, photo=None):
@@ -145,8 +145,8 @@ async def main() -> None:
     if ml_target is _UNRESOLVED:
         return
 
-    # Build the pipeline ONCE and reuse it for the life of the process, same
-    # rationale as run.py: avoid rebuilding stateful components per message.
+    # Build the pipeline ONCE and reuse it for the life of the process:
+    # avoid rebuilding stateful components per message.
     # Todos los `await` (resolución de canales) ya ocurrieron arriba; de acá a
     # poblar pipeline_holder no hay await, así que ningún mensaje encolado llega
     # a on_text antes de que el pipeline esté asignado.
@@ -158,6 +158,9 @@ async def main() -> None:
     # ofertas entre sí, así que el mismo producto llega varias veces. Las claves
     # llevan prefijo de plataforma, así que no colisionan entre handlers.
     dedup = DedupStore(cfg["dedup_db"])
+    expired = dedup.purge()
+    if expired:
+        logging.info("Dedup: %d claves vencidas purgadas", expired)
     amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
     shopee_review = ShopeeReviewPipeline(shopee_poster, dedup=dedup)
     ml_review = MercadoLivreReviewPipeline(ml_poster, dedup=dedup)

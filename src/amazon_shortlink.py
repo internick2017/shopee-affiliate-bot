@@ -6,19 +6,16 @@ La URL final trae el tag y la atribución del afiliado de origen, así que se ca
 a `amazon.com.br/dp/{ASIN}` — re-taguear encima no borraría `ascsubtag`/`btn_ref`.
 """
 import logging
-import re
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 import requests
 
 from .amazon_retagger import extract_asin
+from .links import AMAZON_SHORTLINK_RE
 
 logger = logging.getLogger(__name__)
 
-# `link.amazon/XXX` (shortener propio de Amazon) y `amzn.to/XXX` (bit.ly de Amazon).
-_SHORTLINK_RE = re.compile(
-    r"https?://link\.amazon/\w+|https?://amzn\.to/\w+", re.IGNORECASE
-)
+_SHORTLINK_RE = AMAZON_SHORTLINK_RE
 
 _TIMEOUT_SECONDS = 15
 
@@ -28,14 +25,14 @@ def _default_get(url: str):
     return requests.get(url, allow_redirects=True, timeout=_TIMEOUT_SECONDS, stream=True)
 
 
-def has_amazon_shortlinks(text: Optional[str]) -> bool:
+def has_amazon_shortlinks(text: str | None) -> bool:
     """True si el texto contiene al menos un shortlink de Amazon."""
     if not text:
         return False
     return bool(_SHORTLINK_RE.search(text))
 
 
-def extract_amazon_shortlinks(text: Optional[str]) -> List[str]:
+def extract_amazon_shortlinks(text: str | None) -> list[str]:
     """Devuelve todos los shortlinks de Amazon del texto, en orden de aparición."""
     if not text:
         return []
@@ -46,7 +43,7 @@ def resolve_amazon_shortlink(
     url: str,
     *,
     http_get: Callable[..., object] = _default_get,
-) -> Optional[str]:
+) -> str | None:
     """Sigue el redirect y devuelve `https://www.amazon.com.br/dp/{ASIN}`.
 
     Devuelve None si la red falla o si el destino no es una página de producto
@@ -72,10 +69,10 @@ def resolve_amazon_shortlink(
 
 
 def expand_amazon_shortlinks(
-    text: Optional[str],
+    text: str | None,
     *,
     http_get: Callable[..., object] = _default_get,
-) -> Optional[str]:
+) -> str | None:
     """Reemplaza cada shortlink de Amazon por la URL canónica del producto.
 
     Los shortlinks que no resuelven se dejan como están (el resto del pipeline
@@ -85,7 +82,8 @@ def expand_amazon_shortlinks(
     if not has_amazon_shortlinks(text):
         return text
 
-    resolved: Dict[str, Optional[str]] = {}
+    assert text is not None  # has_amazon_shortlinks(None) es False
+    resolved: dict[str, str | None] = {}
     result = text
     for short in extract_amazon_shortlinks(text):
         if short not in resolved:

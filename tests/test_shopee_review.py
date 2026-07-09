@@ -2,11 +2,12 @@ import asyncio
 
 from src.shopee_review import (
     DEFAULT_MARKER,
-    has_shopee_links,
-    build_shopee_review_message,
-    shopee_dedup_key,
     ShopeeReviewPipeline,
+    build_shopee_review_message,
+    has_shopee_links,
+    shopee_dedup_key,
 )
+from tests.fakes import FakeDedup
 
 
 class FakePoster:
@@ -78,16 +79,6 @@ def test_pipeline_skips_when_no_shopee():
 
 # --- dedup ---
 
-class _FakeDedup:
-    def __init__(self):
-        self.keys = {}
-
-    def seen(self, key):
-        return key in self.keys
-
-    def mark(self, key):
-        self.keys[key] = True
-
 
 def test_shopee_dedup_key_ignores_query_params():
     a = shopee_dedup_key("🔗 https://s.shopee.com.br/8V77TB32CU")
@@ -107,7 +98,7 @@ def test_shopee_dedup_key_differs_per_product():
 
 def test_pipeline_skips_duplicate_shopee_offer():
     poster = FakePoster()
-    dedup = _FakeDedup()
+    dedup = FakeDedup()
     pipe = ShopeeReviewPipeline(poster, dedup=dedup)
 
     assert asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc")) == 1

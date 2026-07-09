@@ -1,11 +1,11 @@
 from decimal import Decimal
 
 from src.prices import (
-    parse_br_number,
-    is_coupon_line,
-    is_price_line,
     extract_price,
     extract_price_info,
+    is_coupon_line,
+    is_price_line,
+    parse_br_number,
 )
 
 
@@ -124,3 +124,26 @@ def test_discount_badge_after_price_still_a_price():
     """No romper 'Por: R$ 6,66 (44% off)' al agregar la regla de R$X OFF."""
     assert is_price_line("Por: R$ 6,66 (44% off)")
     assert not is_coupon_line("Por: R$ 6,66 (44% off)")
+
+
+def test_dot_with_two_decimals_is_not_a_thousands_separator():
+    """"99.90" es 99,90 en formato en-US. Tratarlo como miles lo multiplicaba por cien."""
+    assert parse_br_number("99.90") == Decimal("99.90")
+    assert parse_br_number("100.00") == Decimal("100.00")
+    assert parse_br_number("1.23") == Decimal("1.23")
+
+
+def test_dot_with_three_digits_is_still_a_thousands_separator():
+    assert parse_br_number("2.391") == Decimal("2391")
+    assert parse_br_number("1.234.567") == Decimal("1234567")
+
+
+def test_comma_still_wins_as_decimal_separator():
+    assert parse_br_number("1.289,10") == Decimal("1289.10")
+    assert parse_br_number("99,90") == Decimal("99.90")
+
+
+def test_coupon_ceiling_is_not_a_product_price():
+    """"Limite de R$ 50" es el tope del cupón; anclaba el nombre basura "Limite de"."""
+    assert is_coupon_line("Limite de R$ 50")
+    assert not is_price_line("Limite de R$ 50")

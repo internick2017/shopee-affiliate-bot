@@ -1,6 +1,5 @@
-import re
-from typing import Optional
 
+from .links import SHOPEE_LINK_RE
 from .review_forward import (
     ReviewPipeline,
     build_review_message,
@@ -8,31 +7,29 @@ from .review_forward import (
     review_dedup_key,
 )
 
-# Detecta links de Shopee Brasil: shopee.com.br, s.shopee.com.br, shp.ee (amplio).
-_SHOPEE_RE = re.compile(
-    r"https?://(?:[\w-]+\.)*shopee\.com\.br/\S+|https?://shp\.ee/\S+", re.IGNORECASE
-)
+_SHOPEE_RE = SHOPEE_LINK_RE
+PLATFORM = "shopee"
 
 DEFAULT_MARKER = "⚠️ SHOPEE: gerar link de afiliado e postar manual"
 
 
-def has_shopee_links(text: Optional[str]) -> bool:
+def has_shopee_links(text: str | None) -> bool:
     """True si el texto contiene al menos un link de Shopee."""
     return has_links(text, _SHOPEE_RE)
 
 
 def build_shopee_review_message(
-    text: Optional[str], marker: str = DEFAULT_MARKER
-) -> Optional[str]:
+    text: str | None, marker: str = DEFAULT_MARKER
+) -> str | None:
     """Si hay link de Shopee, arma el mensaje a revisar: marca + texto (sin footer del
-    competidor). Devuelve None si no hay Shopee."""
-    return build_review_message(text, _SHOPEE_RE, marker)
+    competidor ni los productos de otras plataformas). None si no hay Shopee."""
+    return build_review_message(text, _SHOPEE_RE, marker, platform=PLATFORM)
 
 
-def shopee_dedup_key(text: Optional[str]) -> Optional[str]:
+def shopee_dedup_key(text: str | None) -> str | None:
     """Clave estable para deduplicar una oferta de Shopee (Shopee no expone un id
     de producto en el shortlink, así que se usan los links mismos)."""
-    return review_dedup_key(text, _SHOPEE_RE, "shopee")
+    return review_dedup_key(text, _SHOPEE_RE, PLATFORM)
 
 
 class ShopeeReviewPipeline(ReviewPipeline):
@@ -44,7 +41,7 @@ class ShopeeReviewPipeline(ReviewPipeline):
             poster,
             link_re=_SHOPEE_RE,
             marker=marker,
-            prefix="shopee",
+            prefix=PLATFORM,
             platform="Shopee",
             dedup=dedup,
         )

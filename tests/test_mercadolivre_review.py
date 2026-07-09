@@ -7,6 +7,7 @@ from src.mercadolivre_review import (
     has_mercadolivre_links,
     mercadolivre_dedup_key,
 )
+from tests.fakes import FakeDedup
 
 # Mensaje real de Promocasinha (el link resuelve a /social/promocasinha?ref=<cifrado>).
 PROMOCASINHA_ML = (
@@ -29,17 +30,6 @@ class FakePoster:
 
     async def post_text(self, text):
         self.posts.append(text)
-
-
-class FakeDedup:
-    def __init__(self):
-        self.keys = {}
-
-    def seen(self, key):
-        return key in self.keys
-
-    def mark(self, key):
-        self.keys[key] = True
 
 
 def test_has_mercadolivre_links():

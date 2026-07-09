@@ -1,6 +1,5 @@
 import re
 from decimal import Decimal
-from typing import Optional, Tuple
 
 # Frases que marcan un precio "suelto" (sin R$) cuando siguen a un número.
 _PRICE_PHRASES = r"à vista|no pix|via pix|em até|parcelado|em \d+x"
@@ -30,9 +29,11 @@ _POR_LINE_RE = re.compile(r"^por\s*[\d]", re.IGNORECASE)
 # el precio más bajo de un producto con variantes.
 _A_PARTIR_LINE_RE = re.compile(r"^a partir de:?\s*(?:r\$\s*)?\d", re.IGNORECASE)
 _A_PARTIR_RE = re.compile(r"\ba partir de\b", re.IGNORECASE)
-# Cupones: "% OFF", "OFF em R$", y montos de descuento tipo "cupom de R$10 OFF"
-# (que NO son el precio del producto).
-_COUPON_RE = re.compile(r"%\s*off|off em r\$|r\$\s*\d[\d.,]*\s*off", re.IGNORECASE)
+# Cupones: "% OFF", "OFF em R$", montos de descuento tipo "cupom de R$10 OFF", y el
+# tope de un cupón ("Limite de R$ 50") — ninguno es el precio de un producto.
+_COUPON_RE = re.compile(
+    r"%\s*off|off em r\$|r\$\s*\d[\d.,]*\s*off|limite de\s*r\$", re.IGNORECASE
+)
 _LEADING_SYMBOLS_RE = re.compile(r"^[^0-9A-Za-zÀ-ÿ]+")
 
 
@@ -40,9 +41,15 @@ def parse_br_number(s: str) -> Decimal:
     """Convierte un número brasileño a Decimal. "1.289,10"->1289.10 ; "2.391"->2391."""
     s = s.strip().replace(" ", "").strip(".,")
     if "," in s:
-        s = s.replace(".", "").replace(",", ".")
-    else:
-        s = s.replace(".", "")
+        return Decimal(s.replace(".", "").replace(",", "."))
+    if "." in s:
+        # Sin coma, el punto es separador de miles solo si agrupa de a tres dígitos
+        # ("2.391"). Un grupo final de otro tamaño es un decimal en formato en-US
+        # ("99.90"): tratarlo como miles multiplicaría el precio por cien.
+        head, _, tail = s.rpartition(".")
+        if len(tail) != 3 and "." not in head:
+            return Decimal(s)
+        return Decimal(s.replace(".", ""))
     return Decimal(s)
 
 
@@ -62,9 +69,7 @@ def is_coupon_line(line: str) -> bool:
     if not coupon_match:
         return False
     price_match = _PRICE_RS_LINE_RE.search(line)
-    if price_match and price_match.start() < coupon_match.start():
-        return False
-    return True
+    return not (price_match and price_match.start() < coupon_match.start())
 
 
 def is_price_line(line: str) -> bool:
@@ -83,12 +88,10 @@ def is_price_line(line: str) -> bool:
         return True
     if _POR_LINE_RE.match(core):         # single "POR y ..." line
         return True
-    if _A_PARTIR_LINE_RE.match(core):    # "a partir de 28,39 à vista"
-        return True
-    return False
+    return bool(_A_PARTIR_LINE_RE.match(core))  # "a partir de 28,39 à vista"
 
 
-def extract_price(text: Optional[str]) -> Tuple[Optional[Decimal], Optional[Decimal]]:
+def extract_price(text: str | None) -> tuple[Decimal | None, Decimal | None]:
     """Extrae (precio_final, precio_original) de un texto de oferta.
     Precedencia: descuento con R$ -> descuento sin R$ -> precio único (R$ o frase)."""
     if not text:
@@ -111,7 +114,7 @@ def extract_price(text: Optional[str]) -> Tuple[Optional[Decimal], Optional[Deci
     return (parse_br_number(earliest.group(1)), None)
 
 
-def price_start(line: Optional[str]) -> Optional[int]:
+def price_start(line: str | None) -> int | None:
     """Índice donde arranca la expresión de precio dentro de la línea, o None.
 
     Sirve para recortar el nombre que la precede: en "🔹 The Last of Us - R$ 49" el
@@ -128,7 +131,7 @@ def price_start(line: Optional[str]) -> Optional[int]:
     return min(starts) if starts else None
 
 
-def extract_price_info(line: Optional[str]):
+def extract_price_info(line: str | None):
     """Como `extract_price`, pero pensado para UNA línea y con la variante de precio:
     devuelve `(final, original, es_rango)`.
 

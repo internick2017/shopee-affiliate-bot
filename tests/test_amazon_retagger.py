@@ -89,3 +89,19 @@ def test_extract_asin_from_slug_url():
 def test_extract_asin_none_when_no_product():
     # link a la home (post de cupón), sin producto
     assert extract_asin("https://www.amazon.com.br/?linkCode=sl2&tag=crowmantech-20") is None
+
+
+def test_extract_asin_with_trailing_sentence_punctuation():
+    """El ASIN seguido de puntuación seguía siendo un producto; la oferta se perdía."""
+    assert extract_asin("https://www.amazon.com.br/dp/B07L5BPDV7.") == "B07L5BPDV7"
+    assert extract_asin("https://www.amazon.com.br/dp/B07L5BPDV7)") == "B07L5BPDV7"
+
+
+def test_extract_asin_rejects_longer_token():
+    assert extract_asin("https://www.amazon.com.br/dp/B07L5BPDV7X") is None
+
+
+def test_extract_amazon_links_strips_trailing_punctuation():
+    """Una URL con el punto pegado no se puede postear ni re-taguear."""
+    links = extract_amazon_links("veja https://www.amazon.com.br/dp/B07L5BPDV7. agora")
+    assert links == ["https://www.amazon.com.br/dp/B07L5BPDV7"]

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Optional
 
 from .amazon_retagger import extract_amazon_links, extract_asin
 from .amazon_shortlink import expand_amazon_shortlinks, has_amazon_shortlinks
@@ -17,7 +16,7 @@ def offer_dedup_key(url: str) -> str:
     return f"amazon:{extract_asin(url)}"
 
 
-def amazon_dedup_key(text: Optional[str]) -> Optional[str]:
+def amazon_dedup_key(text: str | None) -> str | None:
     """Clave de la primera oferta de Amazon del texto, o None si no hay links."""
     links = extract_amazon_links(text)
     if not links:
@@ -61,19 +60,23 @@ class AmazonPipeline:
         handled = 0
         for offer in offers:
             key = offer_dedup_key(offer.url)
-            # El dedup se consulta antes de armar el post: `hookbank.next()` consume
-            # un gancho, y un duplicado no debe gastarlo. Cuenta como manejado igual:
-            # la oferta es nuestra, solo que ya se publicó.
-            if self._dedup and self._dedup.seen(key):
+            # La clave se reserva antes de armar el post: `hookbank.next()` consume
+            # un gancho, y un duplicado no debe gastarlo. `claim` es atómico, así que
+            # dos mensajes concurrentes con la misma oferta no la publican los dos.
+            # Cuenta como manejada igual: es nuestra, solo que ya se publicó.
+            if self._dedup and not self._dedup.claim(key):
                 logger.info("Oferta de Amazon ya posteada (%s); se omite", key)
                 handled += 1
                 continue
 
             post = build_post_from_offer(offer, self._tag, self._hookbank.next())
-            await post_offer(self._poster, post, photo)
-            # Solo se marca tras postear, para que un fallo no la dé por publicada.
-            if self._dedup:
-                self._dedup.mark(key)
+            try:
+                await post_offer(self._poster, post, photo)
+            except Exception:
+                # No se publicó: soltar la clave para que se reintente.
+                if self._dedup:
+                    self._dedup.release(key)
+                raise
             logger.info("Post de Amazon (estilo Lanny) publicado: %s", offer.name[:60])
             handled += 1
 

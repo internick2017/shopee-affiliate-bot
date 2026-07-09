@@ -10,8 +10,8 @@ cambia es qué links detectar, con qué marca y con qué prefijo de dedup.
 """
 import logging
 import re
-from typing import Optional
 
+from .links import foreign_link_res, has_any_link
 from .posting import post_offer
 
 logger = logging.getLogger(__name__)
@@ -20,30 +20,77 @@ logger = logging.getLogger(__name__)
 FOOTER_MARKERS = ("grupos de promos", "ctlinks.com.br")
 
 
-def has_links(text: Optional[str], link_re: re.Pattern) -> bool:
+def has_links(text: str | None, link_re: re.Pattern) -> bool:
     if not text:
         return False
     return bool(link_re.search(text))
 
 
+def _split_blocks(text: str) -> list[str]:
+    """Parte el mensaje en bloques separados por líneas en blanco. Las fuentes postean
+    un bloque por producto (nombre, precio, link)."""
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in text.split("\n"):
+        if line.strip():
+            current.append(line)
+        elif current:
+            blocks.append("\n".join(current))
+            current = []
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
+def drop_foreign_blocks(
+    text: str, link_re: re.Pattern, foreign_res: tuple[re.Pattern, ...]
+) -> str:
+    """Quita los bloques cuyo único link es de otra plataforma.
+
+    Un mensaje de Crowman trae Amazon y Mercado Livre mezclados. Sin esto, el canal de
+    ML recibiría también los productos de Amazon —ya publicados y monetizados en su
+    propio canal— con el tag de afiliado del competidor intacto.
+
+    Un bloque sin links (un encabezado) se conserva: no es de nadie y da contexto.
+    Un mensaje sin líneas en blanco es un solo bloque y sobrevive entero.
+    """
+    if not foreign_res:
+        return text
+    kept = [
+        block
+        for block in _split_blocks(text)
+        if link_re.search(block) or not has_any_link(block, foreign_res)
+    ]
+    return "\n\n".join(kept)
+
+
 def build_review_message(
-    text: Optional[str], link_re: re.Pattern, marker: str
-) -> Optional[str]:
-    """Marca + texto original sin el footer del competidor. None si no hay links."""
+    text: str | None,
+    link_re: re.Pattern,
+    marker: str,
+    *,
+    platform: str | None = None,
+) -> str | None:
+    """Marca + texto original sin el footer del competidor. None si no hay links.
+
+    Con `platform` (la clave en `links.PLATFORM_LINK_RES`) también descarta los
+    bloques de las otras plataformas.
+    """
     if not has_links(text, link_re):
         return None
-    filtered = [
+    assert text is not None
+    filtered = "\n".join(
         line
         for line in text.split("\n")
         if not any(m in line.lower() for m in FOOTER_MARKERS)
-    ]
-    cleaned = "\n".join(filtered).strip("\n")
-    return f"{marker}\n\n{cleaned}"
+    )
+    filtered = drop_foreign_blocks(filtered, link_re, foreign_link_res(platform))
+    return f"{marker}\n\n{filtered.strip()}"
 
 
 def review_dedup_key(
-    text: Optional[str], link_re: re.Pattern, prefix: str
-) -> Optional[str]:
+    text: str | None, link_re: re.Pattern, prefix: str
+) -> str | None:
     """Clave de dedup a partir de los links, sin query params (`?lp=aff` cambia
     según quién postee) y ordenados (el orden en el mensaje no significa nada).
 
@@ -71,20 +118,30 @@ class ReviewPipeline:
         self._platform = platform
         self._dedup = dedup
 
-    def dedup_key(self, text) -> Optional[str]:
+    def dedup_key(self, text) -> str | None:
         return review_dedup_key(text, self._link_re, self._prefix)
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
+        msg = build_review_message(
+            text, self._link_re, self._marker, platform=self._prefix
+        )
+        if not msg:
+            return 0
+
+        # `claim` reserva la clave de forma atómica: dos mensajes con la misma oferta
+        # procesados a la vez no pueden ganarla los dos, así que no se reenvía repetida.
         key = self.dedup_key(text)
-        if key and self._dedup and self._dedup.seen(key):
+        if key and self._dedup and not self._dedup.claim(key):
             logger.info("Oferta de %s ya reenviada (%s); se omite", self._platform, key)
             return 1
 
-        msg = build_review_message(text, self._link_re, self._marker)
-        if not msg:
-            return 0
-        await post_offer(self._poster, msg, photo)
-        if key and self._dedup:
-            self._dedup.mark(key)
+        try:
+            await post_offer(self._poster, msg, photo)
+        except Exception:
+            # No se publicó: liberar la clave para reintentarla en el próximo mensaje.
+            if key and self._dedup:
+                self._dedup.release(key)
+            raise
+
         logger.info("Oferta de %s reenviada al canal para revisar", self._platform)
         return 1
