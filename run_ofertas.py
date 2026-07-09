@@ -1,7 +1,14 @@
-"""Entry point: bot de ofertas — escucha Telegram y publica ofertas al canal privado.
+"""Entry point: bot de ofertas — escucha Telegram y publica ofertas a canales privados.
 
-Multi-fuente: enruta cada mensaje por OfferPipeline. Hoy los handlers son Amazon
-(retag + post estilo Lanny) y Shopee (reenvío a revisar); Mercado Livre se descarta.
+Multi-fuente: enruta cada mensaje por OfferPipeline, que prueba los handlers en orden
+y usa el primero que lo reclame:
+
+    Amazon         -> re-taguea el link y arma el post estilo Lanny (automático)
+    Shopee         -> reenvía marcado, para generar el link a mano
+    Mercado Livre  -> reenvía marcado, para generar el link a mano
+
+Cada plataforma publica en su propio canal, y el post lleva la foto del mensaje original.
+Un mensaje que ningún handler reclama se descarta.
 
 Uso:
     python run_ofertas.py            # corre el pipeline

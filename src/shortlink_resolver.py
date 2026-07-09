@@ -8,6 +8,11 @@ _DASH_I_RE = re.compile(r"i\.(\d+)\.(\d+)")
 # Patrón alternativo: /product/{shopId}/{itemId}
 _PRODUCT_PATH_RE = re.compile(r"/product/(\d+)/(\d+)")
 
+# TODO(shopee-api): falta una tercera forma, `/{vendedor}/{shopId}/{itemId}`, que hoy
+# lanza ValueError. Vista en s.shopee.com.br/2LWZxIxStA -> /opaanlp/1040938913/23192930267.
+# Sin cubrir, esas ofertas fallan cuando se retome la automatización de Shopee.
+# (Los links `/m/cupom-de-desconto` no son productos y deben seguir fallando.)
+
 
 def _default_get(url: str):
     return requests.get(url, allow_redirects=True, timeout=15)
