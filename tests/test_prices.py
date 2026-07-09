@@ -1,6 +1,12 @@
 from decimal import Decimal
 
-from src.prices import parse_br_number, is_coupon_line, is_price_line, extract_price
+from src.prices import (
+    parse_br_number,
+    is_coupon_line,
+    is_price_line,
+    extract_price,
+    extract_price_info,
+)
 
 
 def test_parse_br_number():
@@ -87,3 +93,34 @@ def test_coupon_line_still_detected_when_percent_comes_first():
 def test_extract_price_ignores_discount_badge_percentage():
     """El 44 de '(44% off)' no debe confundirse con el precio."""
     assert extract_price("Por: R$ 6,66 (44% off)") == (Decimal("6.66"), None)
+
+
+# --- Crowman: "a partir de X" sin R$, y descuentos en R$ que no son precios ---
+
+def test_a_partir_de_without_rs_is_a_price_line():
+    """Crowman (Dove): 'a partir de 28,39 à vista'. Sin esto el mensaje se descarta entero."""
+    assert is_price_line("a partir de 28,39 à vista")
+    assert is_price_line("A partir de 28,39")
+    assert is_price_line("A partir de: R$ 19,99")
+
+
+def test_extract_price_info_flags_range():
+    assert extract_price_info("a partir de 28,39 à vista") == (Decimal("28.39"), None, True)
+    assert extract_price_info("A partir de: R$ 19,99") == (Decimal("19.99"), None, True)
+
+
+def test_extract_price_info_not_range_for_plain_price():
+    assert extract_price_info("🔥 R$ 183,82 parcelado") == (Decimal("183.82"), None, False)
+    assert extract_price_info("De R$ 408 por R$ 167") == (Decimal("167"), Decimal("408"), False)
+
+
+def test_rs_discount_amount_is_a_coupon_not_a_price():
+    """Crowman (Duracell): '- resgate o cupom de R$10 OFF do anuncio' no es el precio."""
+    assert is_coupon_line("- resgate o cupom de R$10 OFF do anuncio")
+    assert not is_price_line("- resgate o cupom de R$10 OFF do anuncio")
+
+
+def test_discount_badge_after_price_still_a_price():
+    """No romper 'Por: R$ 6,66 (44% off)' al agregar la regla de R$X OFF."""
+    assert is_price_line("Por: R$ 6,66 (44% off)")
+    assert not is_coupon_line("Por: R$ 6,66 (44% off)")

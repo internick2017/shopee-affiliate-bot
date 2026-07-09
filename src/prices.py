@@ -26,7 +26,13 @@ _PRICE_PLAIN_LINE_RE = re.compile(
     r"^\d[\d.,]*\s*(?:" + _PRICE_PHRASES + r")", re.IGNORECASE
 )
 _POR_LINE_RE = re.compile(r"^por\s*[\d]", re.IGNORECASE)
-_COUPON_RE = re.compile(r"%\s*off|off em r\$", re.IGNORECASE)
+# "a partir de 28,39 à vista" (Crowman) o "A partir de: R$ 19,99" (Promocasinha):
+# el precio más bajo de un producto con variantes.
+_A_PARTIR_LINE_RE = re.compile(r"^a partir de:?\s*(?:r\$\s*)?\d", re.IGNORECASE)
+_A_PARTIR_RE = re.compile(r"\ba partir de\b", re.IGNORECASE)
+# Cupones: "% OFF", "OFF em R$", y montos de descuento tipo "cupom de R$10 OFF"
+# (que NO son el precio del producto).
+_COUPON_RE = re.compile(r"%\s*off|off em r\$|r\$\s*\d[\d.,]*\s*off", re.IGNORECASE)
 _LEADING_SYMBOLS_RE = re.compile(r"^[^0-9A-Za-zÀ-ÿ]+")
 
 
@@ -77,6 +83,8 @@ def is_price_line(line: str) -> bool:
         return True
     if _POR_LINE_RE.match(core):         # single "POR y ..." line
         return True
+    if _A_PARTIR_LINE_RE.match(core):    # "a partir de 28,39 à vista"
+        return True
     return False
 
 
@@ -101,3 +109,39 @@ def extract_price(text: Optional[str]) -> Tuple[Optional[Decimal], Optional[Deci
         return (None, None)
     earliest = min(candidates, key=lambda x: x.start())
     return (parse_br_number(earliest.group(1)), None)
+
+
+def price_start(line: Optional[str]) -> Optional[int]:
+    """Índice donde arranca la expresión de precio dentro de la línea, o None.
+
+    Sirve para recortar el nombre que la precede: en "🔹 The Last of Us - R$ 49" el
+    producto está en la propia línea de precio. Usa la misma precedencia que
+    `extract_price`, así que no confunde el "12" de "Kit 12 Cuecas" con el precio.
+    """
+    if not line or is_coupon_line(line):
+        return None
+    for pattern in (_DISCOUNT_RS_RE, _DISCOUNT_NORS_RE):
+        m = pattern.search(line)
+        if m:
+            return m.start()
+    starts = [m.start() for m in (_PRICE_RS_RE.search(line), _PRICE_PLAIN_RE.search(line)) if m]
+    return min(starts) if starts else None
+
+
+def extract_price_info(line: Optional[str]):
+    """Como `extract_price`, pero pensado para UNA línea y con la variante de precio:
+    devuelve `(final, original, es_rango)`.
+
+    "Es rango" = la línea dice "a partir de", o sea que el precio es el más bajo de
+    varias variantes. El post lo anuncia como "A partir de ..." en vez de "Por: ...".
+    Una línea de cupón no tiene precio: devuelve `(None, None, False)`.
+    """
+    if not line or is_coupon_line(line):
+        return (None, None, False)
+    final, original = extract_price(line)
+    if final is None:
+        return (None, None, False)
+    # Un descuento ("De X por Y") ya es explícito; "a partir de" solo marca rango
+    # cuando es el único precio de la línea.
+    is_range = original is None and bool(_A_PARTIR_RE.search(line))
+    return (final, original, is_range)

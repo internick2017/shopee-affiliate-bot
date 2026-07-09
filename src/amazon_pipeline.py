@@ -4,19 +4,21 @@ from typing import Optional
 
 from .amazon_retagger import extract_amazon_links, extract_asin
 from .amazon_shortlink import expand_amazon_shortlinks, has_amazon_shortlinks
-from .lanny_post import build_lanny_amazon_post
+from .lanny_post import build_post_from_offer
+from .offers import extract_offers
 from .posting import post_offer
 
 logger = logging.getLogger(__name__)
 
 
-def amazon_dedup_key(text: Optional[str]) -> Optional[str]:
-    """Clave estable para deduplicar una oferta de Amazon entre grupos.
+def offer_dedup_key(url: str) -> str:
+    """Clave estable de una oferta de Amazon: el ASIN. El mismo producto llega de
+    varios grupos con query params y tags de origen distintos."""
+    return f"amazon:{extract_asin(url)}"
 
-    Preferimos el ASIN: el mismo producto llega de Crowman y de IAchados con
-    query params y tags distintos, pero el ASIN es el mismo. Si el link no
-    apunta a un producto, caemos a la URL sin query (mejor que nada).
-    """
+
+def amazon_dedup_key(text: Optional[str]) -> Optional[str]:
+    """Clave de la primera oferta de Amazon del texto, o None si no hay links."""
     links = extract_amazon_links(text)
     if not links:
         return None
@@ -27,7 +29,7 @@ def amazon_dedup_key(text: Optional[str]) -> Optional[str]:
 
 
 class AmazonPipeline:
-    """Turns a promo message into a Lanny-style Amazon post and publishes it."""
+    """Turns each Amazon offer in a promo message into a Lanny-style post."""
 
     def __init__(self, tag, poster, hookbank, dedup=None, expand=expand_amazon_shortlinks):
         self._tag = tag
@@ -52,22 +54,27 @@ class AmazonPipeline:
         # conocer el ASIN, que es la clave de dedup.
         text = await self._expanded(text)
 
-        # La clave se calcula ANTES de armar el post: `hookbank.next()` consume un
-        # gancho, y un duplicado no debe gastarlo.
-        key = amazon_dedup_key(text)
-        if key and self._dedup and self._dedup.seen(key):
-            # Devuelve 1 (=lo manejé) a propósito: el mensaje es nuestro y ya se
-            # posteó. Devolver 0 lo dejaría caer al handler siguiente.
-            logger.info("Oferta de Amazon ya posteada (%s); se omite", key)
-            return 1
-
-        post = build_lanny_amazon_post(text, self._tag, self._hookbank.next())
-        if not post:
+        offers = extract_offers(text)
+        if not offers:
             return 0
-        await post_offer(self._poster, post, photo)
-        # Solo se marca tras postear: si el post no se pudo armar, el producto
-        # sigue disponible para cuando llegue un mensaje mejor formado.
-        if key and self._dedup:
-            self._dedup.mark(key)
-        logger.info("Post de Amazon (estilo Lanny) publicado al canal")
-        return 1
+
+        handled = 0
+        for offer in offers:
+            key = offer_dedup_key(offer.url)
+            # El dedup se consulta antes de armar el post: `hookbank.next()` consume
+            # un gancho, y un duplicado no debe gastarlo. Cuenta como manejado igual:
+            # la oferta es nuestra, solo que ya se publicó.
+            if self._dedup and self._dedup.seen(key):
+                logger.info("Oferta de Amazon ya posteada (%s); se omite", key)
+                handled += 1
+                continue
+
+            post = build_post_from_offer(offer, self._tag, self._hookbank.next())
+            await post_offer(self._poster, post, photo)
+            # Solo se marca tras postear, para que un fallo no la dé por publicada.
+            if self._dedup:
+                self._dedup.mark(key)
+            logger.info("Post de Amazon (estilo Lanny) publicado: %s", offer.name[:60])
+            handled += 1
+
+        return handled

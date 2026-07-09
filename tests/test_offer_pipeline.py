@@ -27,14 +27,22 @@ class FakePoster:
         self.posts.append(text)
 
 
-def test_uses_first_handler_that_returns_nonzero():
+def test_every_handler_sees_the_message_and_counts_are_summed():
+    """Un mensaje puede traer productos de varias plataformas: nadie se lo queda entero."""
     a = FakeHandler(1, "a")
     b = FakeHandler(1, "b")
     pipe = OfferPipeline([a, b])
     n = asyncio.run(pipe.handle("x"))
-    assert n == 1
+    assert n == 2
     assert a.calls == 1
-    assert b.calls == 0  # no se llama al segundo si el primero manejó
+    assert b.calls == 1
+
+
+def test_handler_can_publish_several_offers_from_one_message():
+    a = FakeHandler(3, "a")
+    b = FakeHandler(0, "b")
+    pipe = OfferPipeline([a, b])
+    assert asyncio.run(pipe.handle("x")) == 3
 
 
 def test_falls_through_to_next_handler():
@@ -167,19 +175,52 @@ def test_each_platform_goes_to_its_own_channel():
     assert len(ml_poster.posts) == 1
 
 
-def test_amazon_message_with_ml_link_is_forwarded_to_ml():
-    """Amazon se rinde ante un mensaje con links de ML; lo recoge el handler de ML."""
+def test_mixed_message_posts_amazon_and_forwards_ml():
+    """Crowman mezcla bloques de Amazon y de ML en un mensaje: cada handler toma el suyo."""
     from src.mercadolivre_review import DEFAULT_MARKER as ML_MARKER
 
     amazon_poster, shopee_poster, ml_poster = FakePoster(), FakePoster(), FakePoster()
     pipe = _full_pipeline(amazon_poster, shopee_poster, ml_poster)
 
     mixto = (
-        "Produto X\n🔥 R$ 19\n"
-        "https://www.amazon.com.br/dp/B07QZB3PDY?tag=x-20\n"
-        "https://meli.la/2E9VURp"
+        "Kit 12 Cuecas Boxer Reebok\n"
+        "🔥 R$ 94 à vista\n"
+        "🛒https://www.amazon.com.br/dp/B0CW25HCNG?tag=crowmantech-20\n"
+        "\n"
+        "Braé Essential Kit Fluido 260ml\n"
+        "🔥 R$ 119,77 À vista\n"
+        "🛒https://meli.la/19ZAxqR"
     )
-    assert asyncio.run(pipe.handle(mixto)) == 1
-    assert amazon_poster.posts == []
+    assert asyncio.run(pipe.handle(mixto)) == 2
+
+    # el producto de Amazon se monetiza solo...
+    assert len(amazon_poster.posts) == 1
+    assert "Kit 12 Cuecas Boxer Reebok" in amazon_poster.posts[0]
+    assert "dp/B0CW25HCNG?tag=ofertaslanny-20" in amazon_poster.posts[0]
+    # ...y el de ML va a revisión manual, sin robarse el mensaje entero
     assert len(ml_poster.posts) == 1
     assert ml_poster.posts[0].startswith(ML_MARKER)
+
+
+def test_ml_block_price_is_not_attached_to_the_amazon_product():
+    """El precio del bloque de ML no debe colarse en el post de Amazon."""
+    amazon_poster, shopee_poster, ml_poster = FakePoster(), FakePoster(), FakePoster()
+    pipe = _full_pipeline(amazon_poster, shopee_poster, ml_poster)
+
+    mixto = (
+        "Braé Essential Kit Fluido 260ml\n"
+        "🔥 R$ 119,77 À vista\n"
+        "🛒https://meli.la/19ZAxqR\n"
+        "\n"
+        "Kit 4 Bermuda Shorts Tactel\n"
+        "🔥 R$ 55 em até 2x s/ juros\n"
+        "🛒https://www.amazon.com.br/dp/B0FFNRMR4L?tag=crowmantech-20"
+    )
+    asyncio.run(pipe.handle(mixto))
+
+    assert len(amazon_poster.posts) == 1
+    post = amazon_poster.posts[0]
+    assert "Kit 4 Bermuda Shorts Tactel" in post
+    assert "R$ 55,00" in post
+    assert "119,77" not in post
+    assert "Braé" not in post
