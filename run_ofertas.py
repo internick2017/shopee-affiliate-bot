@@ -15,6 +15,7 @@ import logging
 import sys
 
 from src.amazon_pipeline import AmazonPipeline
+from src.mercadolivre_review import MercadoLivreReviewPipeline
 from src.offer_pipeline import OfferPipeline
 from src.shopee_review import ShopeeReviewPipeline
 from src.channel_poster import ChannelPoster
@@ -50,6 +51,36 @@ async def _resolve_target(listener, target):
         if name and target.lower() in name.lower():
             return dialog.id
     return None
+
+
+# Distingue "el canal está configurado pero no existe" (abortar) de un id de canal
+# válido. No sirve None: un id de canal nunca es None, pero `_resolve_target`
+# devuelve None justamente cuando no encuentra el canal.
+_UNRESOLVED = object()
+
+
+async def _resolve_platform_channel(listener, configured, fallback, env_var, platform):
+    """Resuelve el canal de una plataforma de reenvío manual.
+
+    Sin configurar -> cae al canal principal con un warning (no perder mensajes).
+    Configurado pero inexistente -> `_UNRESOLVED`, y el bot no arranca: mandar las
+    ofertas al canal equivocado en silencio sería peor que fallar.
+    """
+    if not configured:
+        logger.warning(
+            "%s no está seteado: las ofertas de %s irán al canal principal.",
+            env_var, platform,
+        )
+        return fallback
+
+    target = await _resolve_target(listener, configured)
+    if target is None:
+        logger.error(
+            "No se encontró ningún canal cuyo nombre contenga %r. Revisa %s.",
+            configured, env_var,
+        )
+        return _UNRESOLVED
+    return target
 
 
 async def main() -> None:
@@ -94,24 +125,18 @@ async def main() -> None:
         )
         return
 
-    # Cada plataforma publica en su propio canal. Shopee -> "Ofertas Shopee"
-    # (SHOPEE_CHANNEL_ID). Si no está configurado, cae al canal principal para
-    # no perder los mensajes; si está pero no se resuelve, no arranca (evita
-    # mandar Shopee al canal equivocado en silencio).
-    shopee_target = amazon_target
-    if cfg["shopee_channel_id"]:
-        shopee_target = await _resolve_target(listener, cfg["shopee_channel_id"])
-        if shopee_target is None:
-            logger.error(
-                "No se encontró ningún canal cuyo nombre contenga %r. Revisa SHOPEE_CHANNEL_ID.",
-                cfg["shopee_channel_id"],
-            )
-            return
-    else:
-        logger.warning(
-            "SHOPEE_CHANNEL_ID no está seteado: las ofertas de Shopee irán al canal principal (%r).",
-            cfg["channel_id"],
-        )
+    # Cada plataforma de reenvío manual publica en su propio canal.
+    shopee_target = await _resolve_platform_channel(
+        listener, cfg["shopee_channel_id"], amazon_target, "SHOPEE_CHANNEL_ID", "Shopee"
+    )
+    if shopee_target is _UNRESOLVED:
+        return
+
+    ml_target = await _resolve_platform_channel(
+        listener, cfg["ml_channel_id"], amazon_target, "ML_CHANNEL_ID", "Mercado Livre"
+    )
+    if ml_target is _UNRESOLVED:
+        return
 
     # Build the pipeline ONCE and reuse it for the life of the process, same
     # rationale as run.py: avoid rebuilding stateful components per message.
@@ -120,6 +145,7 @@ async def main() -> None:
     # a on_text antes de que el pipeline esté asignado.
     amazon_poster = ChannelPoster(listener._client, amazon_target)
     shopee_poster = ChannelPoster(listener._client, shopee_target)
+    ml_poster = ChannelPoster(listener._client, ml_target)
     hookbank = HookBank.from_file(cfg["hooks_file"])
     # Un solo store compartido por todos los handlers: los grupos fuente se copian
     # ofertas entre sí, así que el mismo producto llega varias veces. Las claves
@@ -127,12 +153,16 @@ async def main() -> None:
     dedup = DedupStore(cfg["dedup_db"])
     amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
     shopee_review = ShopeeReviewPipeline(shopee_poster, dedup=dedup)
-    pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review])
+    ml_review = MercadoLivreReviewPipeline(ml_poster, dedup=dedup)
+    # Amazon primero: es el único que monetiza solo. Se rinde ante un mensaje con
+    # links de Mercado Livre, así que esas ofertas caen al handler de ML.
+    pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review, ml_review])
 
     logger.info(
-        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s shopee_channel=%s dedup_db=%s (observe=%s)",
+        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s "
+        "shopee_channel=%s ml_channel=%s dedup_db=%s (observe=%s)",
         cfg["amazon_tag"], cfg["source_chats"], amazon_target, shopee_target,
-        cfg["dedup_db"], observe,
+        ml_target, cfg["dedup_db"], observe,
     )
     logger.info("Escuchando Telegram... (observe=%s)", observe)
     await listener.run_until_disconnected()

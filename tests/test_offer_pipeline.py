@@ -117,3 +117,67 @@ def test_all_handlers_raise_returns_zero():
 
     pipe = OfferPipeline([RaisingHandler(), RaisingHandler()])
     assert asyncio.run(pipe.handle("x")) == 0
+
+
+# --- router completo: Amazon + Shopee + Mercado Livre ---
+
+def _full_pipeline(amazon_poster, shopee_poster, ml_poster):
+    from src.mercadolivre_review import MercadoLivreReviewPipeline
+
+    return OfferPipeline([
+        AmazonPipeline("ofertaslanny-20", amazon_poster, HookBank(["GANCHO"])),
+        ShopeeReviewPipeline(shopee_poster),
+        MercadoLivreReviewPipeline(ml_poster),
+    ])
+
+
+def test_ml_message_goes_to_ml_poster_only():
+    from src.mercadolivre_review import DEFAULT_MARKER as ML_MARKER
+
+    amazon_poster, shopee_poster, ml_poster = FakePoster(), FakePoster(), FakePoster()
+    pipe = _full_pipeline(amazon_poster, shopee_poster, ml_poster)
+
+    text = "👟 Tênis\n🔥 DE 399,99 | POR 218,11 em 6x\n🔗 https://meli.la/2E9VURp"
+    assert asyncio.run(pipe.handle(text)) == 1
+    assert amazon_poster.posts == []
+    assert shopee_poster.posts == []
+    assert len(ml_poster.posts) == 1
+    assert ml_poster.posts[0].startswith(ML_MARKER)
+
+
+def test_each_platform_goes_to_its_own_channel():
+    amazon_poster, shopee_poster, ml_poster = FakePoster(), FakePoster(), FakePoster()
+    pipe = _full_pipeline(amazon_poster, shopee_poster, ml_poster)
+
+    amazon = (
+        "🍔 Heinz Maionese Alho Tostado Com Ervas 215g\n"
+        "🔥 DE 13,59 | POR 9,16\n"
+        "🔗 https://www.amazon.com.br/dp/B0B25NN5HL?tag=iachadospromo-20"
+    )
+    shopee = "📺 Smart TV\n🔥 POR 841,07 no Pix\n🔗 https://s.shopee.com.br/8V77TB32CU"
+    ml = "👟 Tênis\n🔥 POR 218,11\n🔗 https://meli.la/2E9VURp"
+
+    for text in (amazon, shopee, ml):
+        assert asyncio.run(pipe.handle(text)) == 1
+
+    assert len(amazon_poster.posts) == 1
+    assert len(shopee_poster.posts) == 1
+    assert len(ml_poster.posts) == 1
+
+
+def test_amazon_message_with_ml_link_is_forwarded_to_ml():
+    """Amazon se rinde ante un mensaje con links de ML; lo recoge el handler de ML."""
+    from src.mercadolivre_review import DEFAULT_MARKER as ML_MARKER
+
+    amazon_poster, shopee_poster, ml_poster = FakePoster(), FakePoster(), FakePoster()
+    pipe = _full_pipeline(amazon_poster, shopee_poster, ml_poster)
+
+    mixto = (
+        "Produto X\n🔥 R$ 19\n"
+        "https://www.amazon.com.br/dp/B07QZB3PDY?tag=x-20\n"
+        "https://meli.la/2E9VURp"
+    )
+    assert asyncio.run(pipe.handle(mixto)) == 1
+    assert amazon_poster.posts == []
+    assert len(ml_poster.posts) == 1
+    assert ml_poster.posts[0].startswith(ML_MARKER)

@@ -57,3 +57,24 @@ def test_shopee_channel_id_absent_is_none(monkeypatch):
     cfg = config.load_config()
 
     assert cfg["shopee_channel_id"] is None
+
+
+def test_ml_channel_id_read_by_name(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("ML_CHANNEL_ID", "Ofertas ML")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["ml_channel_id"] == "Ofertas ML"
+
+
+def test_ml_channel_id_absent_is_none(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("ML_CHANNEL_ID", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["ml_channel_id"] is None

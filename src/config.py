@@ -39,6 +39,7 @@ def load_config() -> dict:
         "shopee_secret": os.getenv("SHOPEE_SECRET"),
         "channel_id": _maybe_int(os.getenv("TARGET_CHANNEL_ID")),
         "shopee_channel_id": _maybe_int(os.getenv("SHOPEE_CHANNEL_ID")),
+        "ml_channel_id": _maybe_int(os.getenv("ML_CHANNEL_ID")),
         "source_chats": _chats(os.getenv("SOURCE_CHATS", "")),
         "dedup_db": os.getenv("DEDUP_DB", "dedup.db"),
         "hooks_file": os.getenv("HOOKS_FILE", "hooks.txt"),
