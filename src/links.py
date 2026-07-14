@@ -34,6 +34,10 @@ MERCADOLIVRE_LINK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# meli.la (shortlink). Distinto de MERCADOLIVRE_LINK_RE: acá solo el shortlink, que es
+# el único formato que hace falta resolver (un link largo ya expone el MLB en el path).
+MELI_SHORTLINK_RE = re.compile(r"https?://meli\.la/" + _URL_TAIL, re.IGNORECASE)
+
 # Una plataforma puede reclamar por más de un patrón: un `link.amazon/...` sin resolver
 # sigue siendo un producto de Amazon a los ojos de los otros handlers.
 PLATFORM_LINK_RES: dict[str, tuple[re.Pattern, ...]] = {

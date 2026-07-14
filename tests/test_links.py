@@ -1,5 +1,6 @@
 from src.links import (
     AMAZON_LINK_RE,
+    MELI_SHORTLINK_RE,
     MERCADOLIVRE_LINK_RE,
     SHOPEE_LINK_RE,
     foreign_link_res,
@@ -48,3 +49,13 @@ def test_foreign_link_res_of_none_is_empty():
 def test_amazon_shortlink_counts_as_amazon_for_other_platforms():
     """Un `link.amazon/...` sin resolver sigue siendo un producto de Amazon."""
     assert has_any_link("https://link.amazon/B005pACpH", foreign_link_res("ml")) is True
+
+
+def test_meli_shortlink_matches_only_short_form():
+    assert MELI_SHORTLINK_RE.findall("olha https://meli.la/19ZAxqR,") == [
+        "https://meli.la/19ZAxqR"
+    ]
+    assert (
+        MELI_SHORTLINK_RE.findall("https://www.mercadolivre.com.br/social/x?ref=abc")
+        == []
+    )
