@@ -43,4 +43,6 @@ def load_config() -> dict:
         "dedup_db": os.getenv("DEDUP_DB", "dedup.db"),
         "hooks_file": os.getenv("HOOKS_FILE", "hooks.txt"),
         "amazon_tag": os.getenv("AMAZON_TAG"),
+        "ml_matt_word": os.getenv("ML_MATT_WORD"),
+        "ml_matt_tool": os.getenv("ML_MATT_TOOL"),
     }

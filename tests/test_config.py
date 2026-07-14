@@ -78,3 +78,29 @@ def test_ml_channel_id_absent_is_none(monkeypatch):
     cfg = config.load_config()
 
     assert cfg["ml_channel_id"] is None
+
+
+def test_ml_matt_word_and_tool_read_from_env(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("ML_MATT_WORD", "lannybot")
+    monkeypatch.setenv("ML_MATT_TOOL", "56889681")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["ml_matt_word"] == "lannybot"
+    assert cfg["ml_matt_tool"] == "56889681"
+
+
+def test_ml_matt_word_and_tool_absent_are_none(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("ML_MATT_WORD", raising=False)
+    monkeypatch.delenv("ML_MATT_TOOL", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["ml_matt_word"] is None
+    assert cfg["ml_matt_tool"] is None
