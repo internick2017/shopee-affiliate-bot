@@ -163,7 +163,12 @@ async def main() -> None:
         logging.info("Dedup: %d claves vencidas purgadas", expired)
     amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
     shopee_review = ShopeeReviewPipeline(shopee_poster, dedup=dedup)
-    ml_review = MercadoLivreReviewPipeline(ml_poster, dedup=dedup)
+    ml_review = MercadoLivreReviewPipeline(
+        ml_poster,
+        dedup=dedup,
+        matt_word=cfg["ml_matt_word"],
+        matt_tool=cfg["ml_matt_tool"],
+    )
     # Amazon primero: es el único que monetiza solo. Se rinde ante un mensaje con
     # links de Mercado Livre, así que esas ofertas caen al handler de ML.
     pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review, ml_review])
