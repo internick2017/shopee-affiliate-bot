@@ -3,6 +3,7 @@ import asyncio
 from src.mercadolivre_review import (
     DEFAULT_MARKER,
     MercadoLivreReviewPipeline,
+    build_mercadolivre_auto_post,
     build_mercadolivre_review_message,
     has_mercadolivre_links,
     mercadolivre_dedup_key,
@@ -135,3 +136,151 @@ def test_forward_carries_source_photo():
     imagen, texto = poster.files[0]
     assert imagen is photo
     assert texto.startswith(DEFAULT_MARKER)
+
+
+# Mismo body real usado en tests/test_mercadolivre_resolver.py (Smart TV Hisense,
+# item_id MLB54629493) — PROMOCASINHA_ML de arriba trae justo ese meli.la/1Q8EMBW.
+_PRODUCT_BODY = (
+    '<html><head>'
+    '<meta property="og:title" content="Smart Tv Hisense De 65 Polegadas Vidaa 65u6qv Uled 4k"/>'
+    '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+    '"path":"/affiliates/profile","type":"view","should_ignore_stream":false,'
+    '"event_data":{"page_type":"affiliate-profile","content_id":"not_apply",'
+    '"item_id":"MLB54629493","owner_id":"2530242411","matt_tool":"70340356",'
+    '"source":"affiliate-profile"}}}</script></body></html>'
+)
+
+_LIST_BODY = (
+    '<html><head>'
+    '<meta property="og:title" content="Minhas listas de recomendações"/>'
+    '</head><body><script>window.__PRELOADED_STATE__={"page_type":"lists"}'
+    '</script></body></html>'
+)
+
+
+class _FakeMlResponse:
+    def __init__(self, text):
+        self.text = text
+
+    def close(self):
+        pass
+
+
+def _fake_ml_get(body):
+    def get(url, **kwargs):
+        return _FakeMlResponse(body)
+
+    return get
+
+
+def test_auto_post_replaces_link_and_has_no_marker():
+    msg = build_mercadolivre_auto_post(
+        PROMOCASINHA_ML, "lannybot", "56889681", http_get=_fake_ml_get(_PRODUCT_BODY)
+    )
+    assert msg is not None
+    assert not msg.startswith(DEFAULT_MARKER)
+    assert "⚠️" not in msg
+    assert (
+        "https://www.mercadolivre.com.br/p/MLB54629493"
+        "?matt_word=lannybot&matt_tool=56889681"
+    ) in msg
+    assert "https://meli.la/1Q8EMBW" not in msg
+    # el resto del contenido sigue ahí
+    assert "Smart TV Hisense de 65 polegadas Vidaa 65u6qv Uled 4k" in msg
+    assert "TVCASASBAHIA" in msg
+
+
+def test_auto_post_none_when_resolution_fails():
+    msg = build_mercadolivre_auto_post(
+        PROMOCASINHA_ML, "lannybot", "56889681", http_get=_fake_ml_get(_LIST_BODY)
+    )
+    assert msg is None
+
+
+def test_auto_post_none_without_ml_links():
+    assert (
+        build_mercadolivre_auto_post(
+            "sem mercado livre aqui", "lannybot", "56889681",
+            http_get=_fake_ml_get(_PRODUCT_BODY),
+        )
+        is None
+    )
+
+
+def test_auto_post_strips_competitor_footer():
+    text = (
+        "Produto X\n"
+        "https://meli.la/1Q8EMBW\n"
+        "🛍 Grupos de promos:\n"
+        "https://ctlinks.com.br"
+    )
+    msg = build_mercadolivre_auto_post(
+        text, "lannybot", "56889681", http_get=_fake_ml_get(_PRODUCT_BODY)
+    )
+    assert msg is not None
+    assert "ctlinks.com.br" not in msg
+    assert "Grupos de promos" not in msg
+
+
+def test_pipeline_auto_posts_when_configured_and_resolvable():
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(
+        poster, matt_word="lannybot", matt_tool="56889681"
+    )
+
+    import src.mercadolivre_review as module
+
+    original = module.build_own_mercadolivre_links
+
+    def fake_build_own(text, matt_word, matt_tool, **kwargs):
+        assert matt_word == "lannybot"
+        assert matt_tool == "56889681"
+        return {
+            "https://meli.la/1Q8EMBW": (
+                "https://www.mercadolivre.com.br/p/MLB54629493"
+                "?matt_word=lannybot&matt_tool=56889681"
+            )
+        }
+
+    module.build_own_mercadolivre_links = fake_build_own
+    try:
+        result = asyncio.run(pipe.handle(PROMOCASINHA_ML))
+    finally:
+        module.build_own_mercadolivre_links = original
+
+    assert result == 1
+    assert len(poster.posts) == 1
+    assert not poster.posts[0].startswith(DEFAULT_MARKER)
+    assert "MLB54629493" in poster.posts[0]
+
+
+def test_pipeline_falls_back_to_manual_when_not_resolvable():
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(
+        poster, matt_word="lannybot", matt_tool="56889681"
+    )
+
+    import src.mercadolivre_review as module
+
+    original = module.build_own_mercadolivre_links
+    module.build_own_mercadolivre_links = lambda *a, **k: None
+    try:
+        result = asyncio.run(pipe.handle(PROMOCASINHA_ML))
+    finally:
+        module.build_own_mercadolivre_links = original
+
+    assert result == 1
+    assert len(poster.posts) == 1
+    assert poster.posts[0].startswith(DEFAULT_MARKER)
+
+
+def test_pipeline_without_matt_credentials_behaves_like_before():
+    """Sin matt_word/matt_tool configurados, el camino automático ni se intenta:
+    cero regresión respecto al comportamiento anterior a este feature."""
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(poster)
+
+    result = asyncio.run(pipe.handle(PROMOCASINHA_ML))
+
+    assert result == 1
+    assert poster.posts[0].startswith(DEFAULT_MARKER)
