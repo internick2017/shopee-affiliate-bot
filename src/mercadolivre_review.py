@@ -15,7 +15,7 @@ import logging
 from collections.abc import Callable
 
 from .links import MERCADOLIVRE_LINK_RE, foreign_link_res
-from .mercadolivre_resolver import build_own_mercadolivre_links
+from .mercadolivre_resolver import build_own_mercadolivre_links, has_meli_shortlinks
 from .posting import post_offer
 from .review_forward import (
     FOOTER_MARKERS,
@@ -105,7 +105,10 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         self._matt_tool = matt_tool
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
-        if self._matt_word and self._matt_tool:
+        # Igual que AmazonPipeline._expanded: solo se spawnea el thread de resolución
+        # HTTP si el mensaje efectivamente trae shortlinks de ML. El resto (Amazon,
+        # Shopee puros) no paga ese costo.
+        if self._matt_word and self._matt_tool and has_meli_shortlinks(text):
             auto_msg = await asyncio.to_thread(
                 build_mercadolivre_auto_post, text, self._matt_word, self._matt_tool
             )

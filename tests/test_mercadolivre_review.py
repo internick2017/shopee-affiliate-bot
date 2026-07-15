@@ -254,6 +254,37 @@ def test_pipeline_auto_posts_when_configured_and_resolvable():
     assert "MLB54629493" in poster.posts[0]
 
 
+def test_pipeline_auto_path_skips_duplicate():
+    """Mismo caso que test_pipeline_skips_duplicate, pero para la rama automática:
+    handle() también reserva la clave de dedup antes de postear el link propio
+    (lógica duplicada a propósito de ReviewPipeline.handle, ver MercadoLivreReviewPipeline)."""
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(
+        poster, matt_word="lannybot", matt_tool="56889681", dedup=FakeDedup()
+    )
+
+    import src.mercadolivre_review as module
+
+    original = module.build_own_mercadolivre_links
+
+    def fake_build_own(text, matt_word, matt_tool, **kwargs):
+        return {
+            "https://meli.la/1Q8EMBW": (
+                "https://www.mercadolivre.com.br/p/MLB54629493"
+                "?matt_word=lannybot&matt_tool=56889681"
+            )
+        }
+
+    module.build_own_mercadolivre_links = fake_build_own
+    try:
+        assert asyncio.run(pipe.handle(PROMOCASINHA_ML)) == 1
+        assert asyncio.run(pipe.handle(PROMOCASINHA_ML)) == 1
+    finally:
+        module.build_own_mercadolivre_links = original
+
+    assert len(poster.posts) == 1
+
+
 def test_pipeline_falls_back_to_manual_when_not_resolvable():
     poster = FakePoster()
     pipe = MercadoLivreReviewPipeline(
@@ -284,3 +315,31 @@ def test_pipeline_without_matt_credentials_behaves_like_before():
 
     assert result == 1
     assert poster.posts[0].startswith(DEFAULT_MARKER)
+
+
+def test_pipeline_skips_auto_thread_without_ml_shortlinks():
+    """Con matt_word/matt_tool configurados pero sin shortlinks meli.la en el texto,
+    ni se spawnea el thread de resolución (mismo patrón que
+    AmazonPipeline._expanded con has_amazon_shortlinks): build_mercadolivre_auto_post
+    no debería llamarse."""
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(
+        poster, matt_word="lannybot", matt_tool="56889681"
+    )
+
+    import src.mercadolivre_review as module
+
+    def boom(*args, **kwargs):
+        raise AssertionError(
+            "build_mercadolivre_auto_post no debería llamarse sin shortlinks de ML"
+        )
+
+    original = module.build_mercadolivre_auto_post
+    module.build_mercadolivre_auto_post = boom
+    try:
+        result = asyncio.run(pipe.handle("https://www.amazon.com.br/dp/X"))
+    finally:
+        module.build_mercadolivre_auto_post = original
+
+    assert result == 0
+    assert poster.posts == []

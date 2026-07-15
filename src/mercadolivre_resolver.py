@@ -35,6 +35,11 @@ _TIMEOUT_SECONDS = 15
 # degradación segura (build_own_mercadolivre_links devuelve None, cae a reenvío manual).
 _ITEM_ID_RE = re.compile(r'"melidataSocial":\{[^}]*?"item_id":"([^"]*)"')
 
+# Un item_id real de Mercado Livre siempre es "MLB" + dígitos. El regex de arriba
+# captura cualquier corrida de no-comillas, así que esto valida el formato antes de
+# interpolarlo en una URL pública.
+_VALID_ITEM_ID_RE = re.compile(r"^MLB\d+$")
+
 
 def _default_get(url: str):
     return requests.get(
@@ -83,7 +88,15 @@ def resolve_mercadolivre_item(
                 "El link %s no trajo un item_id resoluble (no es producto puntual)", url
             )
             return None
-        return match.group(1)
+        item_id = match.group(1)
+        if not _VALID_ITEM_ID_RE.fullmatch(item_id):
+            logger.warning(
+                "El link %s trajo un item_id con formato inesperado (%r); se descarta",
+                url,
+                item_id,
+            )
+            return None
+        return item_id
     except Exception as exc:
         logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
         return None

@@ -85,6 +85,39 @@ def test_resolve_returns_none_on_network_error():
     assert resolve_mercadolivre_item("https://meli.la/X", http_get=_boom) is None
 
 
+def _body_with_item_id(item_id: str) -> str:
+    return (
+        '<html><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+        '"event_data":{"item_id":"' + item_id + '"}}}</script></body></html>'
+    )
+
+
+def test_resolve_accepts_well_formed_item_id():
+    item_id = resolve_mercadolivre_item(
+        "https://meli.la/X", http_get=_fake_get(_body_with_item_id("MLB12345"))
+    )
+    assert item_id == "MLB12345"
+
+
+def test_resolve_rejects_empty_item_id():
+    """Ya cubierto por el guard de `match.group(1)` vacío, pero el regex de formato
+    también lo rechazaría: lo dejamos explícito acá."""
+    item_id = resolve_mercadolivre_item(
+        "https://meli.la/X", http_get=_fake_get(_body_with_item_id(""))
+    )
+    assert item_id is None
+
+
+def test_resolve_rejects_malformed_item_id():
+    """Un item_id con formato inesperado (acá, un fragmento de script inyectado) no
+    debe terminar interpolado en la URL pública: se trata como fallo de resolución."""
+    malformed = "<script>alert(1)</script>"
+    item_id = resolve_mercadolivre_item(
+        "https://meli.la/X", http_get=_fake_get(_body_with_item_id(malformed))
+    )
+    assert item_id is None
+
+
 def test_retag_mercadolivre_url_builds_expected_link():
     url = retag_mercadolivre_url("MLB54629493", "lannybot", "56889681")
     assert url == (
@@ -120,6 +153,9 @@ def test_build_own_links_none_when_any_fails():
     assert build_own_mercadolivre_links(
         text, "lannybot", "56889681", http_get=flaky_get
     ) is None
+    # Se corta apenas falla BBB: no sigue pidiendo links de más (no hay más acá, pero
+    # confirma que no reintenta AAA ni pide nada fuera de los dos del texto).
+    assert calls == ["https://meli.la/AAA", "https://meli.la/BBB"]
 
 
 def test_build_own_links_none_without_shortlinks():
