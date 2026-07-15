@@ -144,3 +144,25 @@ def test_build_own_links_resolves_each_shortlink_once():
         text, "lannybot", "56889681", http_get=counting_get
     )
     assert calls == ["https://meli.la/1Q8EMBW"]
+
+
+class _ResponseWithBrokenClose:
+    """Response cuyo close() levanta una excepción."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def close(self):
+        raise RuntimeError("close() failed unexpectedly")
+
+
+def _get_broken_close(url, **kwargs):
+    return _ResponseWithBrokenClose(_PRODUCT_BODY)
+
+
+def test_resolve_returns_none_when_close_raises():
+    """Si close() levanta, debe devolver None y NO propagar la excepción."""
+    item_id = resolve_mercadolivre_item(
+        "https://meli.la/1Q8EMBW", http_get=_get_broken_close
+    )
+    assert item_id is None

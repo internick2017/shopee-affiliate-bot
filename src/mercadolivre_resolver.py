@@ -72,22 +72,21 @@ def resolve_mercadolivre_item(
     """
     try:
         response = http_get(url)
+        body = getattr(response, "text", "") or ""
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+
+        match = _ITEM_ID_RE.search(body)
+        if not match or not match.group(1):
+            logger.info(
+                "El link %s no trajo un item_id resoluble (no es producto puntual)", url
+            )
+            return None
+        return match.group(1)
     except Exception as exc:
         logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
         return None
-
-    body = getattr(response, "text", "") or ""
-    close = getattr(response, "close", None)
-    if callable(close):
-        close()
-
-    match = _ITEM_ID_RE.search(body)
-    if not match or not match.group(1):
-        logger.info(
-            "El link %s no trajo un item_id resoluble (no es producto puntual)", url
-        )
-        return None
-    return match.group(1)
 
 
 def retag_mercadolivre_url(item_id: str, matt_word: str, matt_tool: str) -> str:
