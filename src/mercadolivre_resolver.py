@@ -1,4 +1,4 @@
-"""Resuelve shortlinks de Mercado Livre (`meli.la/...`) al item_id del producto.
+"""Resuelve shortlinks de Mercado Livre (`meli.la/...`) a la URL real del producto.
 
 Los canales fuente postean `meli.la/XXXX`, que redirige a
 `mercadolivre.com.br/social/<afiliado>?ref=<blob cifrado>`. El `ref` no se puede
@@ -7,12 +7,21 @@ embebido un JSON interno de tracking (`melidataSocial`) con el item_id real del
 producto compartido — validado contra 43 links reales, 91% de éxito (ver
 docs/superpowers/specs/2026-07-14-mercadolivre-auto-retag-design.md).
 
-Con el item_id en mano, el link propio se arma sin pasar por la Central de
-Afiliados: mercadolivre.com.br/p/{item_id}?matt_word=...&matt_tool=...
+El item_id NO siempre es un ID de catálogo compatible con `/p/{item_id}`: a veces es
+el ID crudo de un anuncio individual sin ficha de catálogo compartida, y en ese caso
+`/p/` da 404 (bug encontrado en producción el 2026-07-17, ~58% de los posts afectados
+— ver docs/superpowers/specs/2026-07-17-mercadolivre-canonical-url-fix-design.md). La
+solución: el mismo JSON trae, en el bloque `metadata` cuyo "id" coincide con el
+item_id, un campo "url" con la ruta REAL del producto (`/up/{user_product_id}`,
+`produto.mercadolivre.com.br/MLB-{id}-slug`, o un deep-link `ddnf.adj.st` que hay que
+desenvolver). Cuando no se encuentra ese campo (típicamente porque el item_id YA es un
+ID de catálogo), se cae al `/p/{item_id}` de siempre, que funciona para ese caso.
 """
 import logging
 import re
+import urllib.parse
 from collections.abc import Callable
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -40,6 +49,11 @@ _ITEM_ID_RE = re.compile(r'"melidataSocial":\{[^}]*?"item_id":"([^"]*)"')
 # interpolarlo en una URL pública.
 _VALID_ITEM_ID_RE = re.compile(r"^MLB\d+$")
 
+# Ventana de búsqueda tras el "url" para encontrar el "url_params" adyacente cuando el
+# url es un deep-link de Adjust (ddnf.adj.st) — los dos campos están uno al lado del
+# otro en el JSON real observado, 600 chars alcanza con margen.
+_ADJST_WINDOW = 600
+
 
 def _default_get(url: str):
     return requests.get(
@@ -64,6 +78,46 @@ def extract_meli_shortlinks(text: str | None) -> list[str]:
     return _SHORTLINK_RE.findall(text)
 
 
+def _extract_item_id(body: str) -> str | None:
+    """Extrae y valida el formato del item_id embebido en el body. None si no hay
+    match, si viene vacío, o si el formato no es MLB + dígitos."""
+    match = _ITEM_ID_RE.search(body)
+    item_id = match.group(1) if match else ""
+    if not _VALID_ITEM_ID_RE.fullmatch(item_id):
+        return None
+    return item_id
+
+
+def _extract_canonical_url(item_id: str, body: str) -> str | None:
+    """Busca el bloque metadata cuyo "id" coincide con item_id y devuelve su "url".
+
+    Si el "url" es un deep-link de Adjust (ddnf.adj.st), lo desenvuelve buscando el
+    parámetro `url=` dentro del "url_params" adyacente. None si no encuentra nada en
+    ningún paso — típicamente porque item_id YA es un ID de catálogo (no tiene una
+    entrada de recomendación propia en la página, y no hace falta: /p/{item_id} ya
+    funciona directo para ese caso).
+    """
+    match = re.search(
+        r'"id":"' + re.escape(item_id) + r'"(?:(?!\}).)*?"url":"([^"]*)"', body
+    )
+    if not match:
+        return None
+    raw_url = match.group(1).replace("\\u002F", "/").replace("\\/", "/")
+
+    if "adj.st" not in raw_url:
+        return raw_url if raw_url.startswith("http") else f"https://{raw_url}"
+
+    window = body[match.end() : match.end() + _ADJST_WINDOW]
+    params_match = re.search(r'"url_params":"([^"]*)"', window)
+    if not params_match:
+        return None
+    params_raw = params_match.group(1).replace("\\u0026", "&").replace("\\/", "/")
+    inner_match = re.search(r"[?&]url=([^&\"]+)", params_raw)
+    if not inner_match:
+        return None
+    return urllib.parse.unquote(inner_match.group(1))
+
+
 def resolve_mercadolivre_item(
     url: str,
     *,
@@ -73,7 +127,7 @@ def resolve_mercadolivre_item(
 
     Devuelve None si la red falla, si la página no trae el bloque melidataSocial
     (p. ej. un link de "lista" en vez de producto puntual), o si item_id viene
-    vacío. Nunca lanza: un shortlink roto no debe tumbar el bot.
+    vacío o con formato inesperado. Nunca lanza: un shortlink roto no debe tumbar el bot.
     """
     try:
         response = http_get(url)
@@ -81,34 +135,55 @@ def resolve_mercadolivre_item(
         close = getattr(response, "close", None)
         if callable(close):
             close()
-
-        match = _ITEM_ID_RE.search(body)
-        if not match or not match.group(1):
+        item_id = _extract_item_id(body)
+        if not item_id:
             logger.info(
                 "El link %s no trajo un item_id resoluble (no es producto puntual)", url
             )
-            return None
-        item_id = match.group(1)
-        if not _VALID_ITEM_ID_RE.fullmatch(item_id):
-            logger.warning(
-                "El link %s trajo un item_id con formato inesperado (%r); se descarta",
-                url,
-                item_id,
-            )
-            return None
         return item_id
     except Exception as exc:
         logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
         return None
 
 
-def retag_mercadolivre_url(item_id: str, matt_word: str, matt_tool: str) -> str:
-    """Arma el link propio: no hace falta pasar por la Central de Afiliados, alcanza
-    con el item_id y los identificadores de campaña/cuenta de Nick."""
-    return (
-        f"https://www.mercadolivre.com.br/p/{item_id}"
-        f"?matt_word={matt_word}&matt_tool={matt_tool}"
-    )
+def resolve_mercadolivre_url(
+    url: str,
+    *,
+    http_get: Callable[..., object] = _default_get,
+) -> str | None:
+    """Sigue el redirect y devuelve la URL BASE (sin matt_word/matt_tool) del producto
+    compartido: la ruta real (/p/, /up/, produto.mercadolivre.com.br) cuando se puede
+    encontrar, o el fallback /p/{item_id} cuando no (item_id de catálogo). None si no
+    se pudo resolver ningún producto. Nunca lanza.
+    """
+    try:
+        response = http_get(url)
+        body = getattr(response, "text", "") or ""
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+        item_id = _extract_item_id(body)
+        if not item_id:
+            logger.info(
+                "El link %s no trajo un item_id resoluble (no es producto puntual)", url
+            )
+            return None
+        canonical = _extract_canonical_url(item_id, body)
+        if canonical:
+            return canonical
+        return f"https://www.mercadolivre.com.br/p/{item_id}"
+    except Exception as exc:
+        logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
+        return None
+
+
+def retag_mercadolivre_url(base_url: str, matt_word: str, matt_tool: str) -> str:
+    """Agrega matt_word/matt_tool a la URL base del producto, descartando cualquier
+    query string o fragment que ya tuviera (tracking propio de Mercado Livre, no
+    nuestro) — igual de limpio que amazon_shortlink canonicalizando a dp/{ASIN}."""
+    parts = urlsplit(base_url)
+    query = urlencode({"matt_word": matt_word, "matt_tool": matt_tool})
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
 
 def build_own_mercadolivre_links(
@@ -132,8 +207,8 @@ def build_own_mercadolivre_links(
     for link in shortlinks:
         if link in resolved:
             continue
-        item_id = resolve_mercadolivre_item(link, http_get=http_get)
-        if not item_id:
+        base_url = resolve_mercadolivre_url(link, http_get=http_get)
+        if not base_url:
             return None
-        resolved[link] = retag_mercadolivre_url(item_id, matt_word, matt_tool)
+        resolved[link] = retag_mercadolivre_url(base_url, matt_word, matt_tool)
     return resolved
