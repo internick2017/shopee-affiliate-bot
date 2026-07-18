@@ -413,3 +413,86 @@ def test_extract_cupon_no_matchea_mitad_de_palabra():
     # porque no estan en la lista de stopwords.
     assert extract_cupon("Cupom MELIMODA no carrinho") == "MELIMODA"
     assert extract_cupon("cupom para produtos SELECIONADOS") is None
+
+
+# Mismo fixture real que en test_mercadolivre_resolver.py (ver Task 1 del plan de
+# 2026-07-18), copiado acá porque los tests no comparten fixtures entre archivos.
+_POLYCARD_BODY_REVIEW = (
+    '<html><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+    '"event_data":{"page_type":"affiliate-profile","item_id":"MLB5960042952"}},'
+    '"polycards":[{"unique_id":"23534c1719f75a2ebc4",'
+    '"metadata":{"id":"MLB5960042952",'
+    '"url":"produto.mercadolivre.com.br\\u002FMLB-5960042952-kit-camisetas'
+    '-tommy-hilfiger-chest-insert-brancapreta-2un-_JM"},'
+    '"components":['
+    '{"type":"title","id":"title","title":{'
+    '"text":"Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un",'
+    '"long_title":false}},'
+    '{"type":"seller","id":"seller"},'
+    '{"type":"price","id":"price","column":1,"price":{'
+    '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
+    '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
+    '"discount_label":{"text":"54% OFF no Pix"}'
+    '}}'
+    ']}]}</script></body></html>'
+)
+
+
+def test_auto_post_arma_post_propio_con_datos_de_ml():
+    texto = (
+        "TENIS PERFEITO\n"
+        "🔥 DE 399 | POR 213,19\n"
+        "🥇 CUPOM: SEMPRENAMODA\n"
+        "https://meli.la/1VHk77B\n"
+        "🛍️ IAchados"
+    )
+
+    msg = build_mercadolivre_auto_post(
+        texto, "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+    )
+
+    assert msg is not None
+    # datos REALES de ML, no los del post ajeno
+    assert "Kit Camisetas Tommy Hilfiger" in msg
+    assert "R$ 284,99" in msg
+    assert "R$ 625,29" in msg
+    assert "213,19" not in msg
+    # la etiqueta se publica tal cual: comunica la condicion "no Pix"
+    assert "54% OFF no Pix" in msg
+    # el cupon se rescata del mensaje original
+    assert "CUPOM: SEMPRENAMODA" in msg
+    # nada de la fuente
+    assert "IAchados" not in msg
+    assert "TENIS PERFEITO" not in msg
+    # el link propio, canonico (no /p/{item_id})
+    assert "produto.mercadolivre.com.br" in msg
+    assert "matt_word=lannybot" in msg
+    assert "matt_tool=56889681" in msg
+
+
+def test_auto_post_sin_descuento_no_publica_ni_cae_al_camino_viejo():
+    """Sin descuento comprobable no es oferta: None directo, no el reemplazo de links."""
+    body = _POLYCARD_BODY_REVIEW.replace(
+        '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},',
+        "",
+    ).replace('"discount_label":{"text":"54% OFF no Pix"}', '"x":1')
+
+    msg = build_mercadolivre_auto_post(
+        "oferta\nhttps://meli.la/1VHk77B", "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(body),
+    )
+
+    assert msg is None
+
+
+def test_auto_post_con_hook_y_multiples_links_no_publica():
+    """Un post con varios productos no se puede armar como UN post propio: reenvio marcado."""
+    texto = "https://meli.la/AAA\nhttps://meli.la/BBB"
+
+    msg = build_mercadolivre_auto_post(
+        texto, "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+    )
+
+    assert msg is None

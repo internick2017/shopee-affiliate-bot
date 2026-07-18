@@ -16,7 +16,16 @@ import re
 from collections.abc import Callable
 
 from .links import MERCADOLIVRE_LINK_RE, foreign_link_res
-from .mercadolivre_resolver import build_own_mercadolivre_links, has_meli_shortlinks
+from .mercadolivre_resolver import (
+    MercadoLivreOffer,
+    build_own_mercadolivre_links,
+    extract_meli_shortlinks,
+    has_meli_shortlinks,
+    resolve_mercadolivre_offer,
+    retag_mercadolivre_url,
+)
+from .models import Product
+from .post_builder import build_post
 from .posting import post_offer
 from .review_forward import (
     FOOTER_MARKERS,
@@ -102,18 +111,65 @@ def mercadolivre_dedup_key(text: str | None) -> str | None:
     return review_dedup_key(text, _MERCADOLIVRE_RE, PLATFORM)
 
 
+def _build_post_propio(
+    text: str, offer: MercadoLivreOffer, matt_word: str, matt_tool: str, hook: str
+) -> str:
+    """El post con el template de Lanny y los datos que ML informa AHORA."""
+    extras: list[str] = []
+    if offer.descuento:
+        extras.append(f"🏷️ {offer.descuento}")
+    cupon = extract_cupon(text)
+    if cupon:
+        extras.append(f"🎟️ CUPOM: {cupon}")
+
+    producto = Product(
+        item_id=0,
+        shop_id=0,
+        name=offer.titulo,
+        price_final=offer.precio,
+        image_url="",
+        price_original=offer.precio_previo,
+        affiliate_link=retag_mercadolivre_url(
+            offer.url_canonica, matt_word, matt_tool
+        ),
+    )
+    return build_post(producto, hook, extra_lines=tuple(extras))
+
+
 def build_mercadolivre_auto_post(
     text: str | None,
     matt_word: str,
     matt_tool: str,
     *,
+    hook: str | None = None,
     http_get: Callable[..., object] | None = None,
 ) -> str | None:
-    """Arma el post YA MONETIZADO reemplazando cada shortlink meli.la por el link
-    propio de Nick. None si no hay shortlinks resolubles, o si ALGUNO no resolvió
-    (todo-o-nada: el caller cae al reenvío manual, sin marca en este camino).
+    """Arma el post YA MONETIZADO de Mercado Livre.
+
+    Con `hook`: intenta el post propio (template de Lanny + datos reales de ML). Si el
+    mensaje no trae exactamente un producto, si ML no resuelve, o si no hay descuento
+    comprobable, devuelve None directo — el caller cae al reenvío marcado, sin pasar por
+    el camino viejo de abajo.
+
+    Sin `hook` (compat con el comportamiento anterior a este cambio): reemplaza cada
+    shortlink por el link propio en el texto de la fuente, todo-o-nada. None si no hay
+    shortlinks resolubles o si ALGUNO no resolvió.
     """
     resolve_kwargs = {} if http_get is None else {"http_get": http_get}
+
+    if hook is not None:
+        if not text:
+            return None
+        enlaces = extract_meli_shortlinks(text)
+        # Un solo producto por post: con varios shortlinks no se sabe cuál es el del
+        # mensaje, así que no se arma nada en vez de adivinar.
+        if len(enlaces) != 1:
+            return None
+        offer = resolve_mercadolivre_offer(enlaces[0], **resolve_kwargs)
+        if not offer or not offer.tiene_descuento:
+            return None
+        return _build_post_propio(text, offer, matt_word, matt_tool, hook)
+
     resolved = build_own_mercadolivre_links(text, matt_word, matt_tool, **resolve_kwargs)
     if not resolved:
         return None
@@ -143,6 +199,7 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         dedup=None,
         matt_word: str | None = None,
         matt_tool: str | None = None,
+        hooks=None,
     ):
         super().__init__(
             poster,
@@ -154,6 +211,7 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         )
         self._matt_word = matt_word
         self._matt_tool = matt_tool
+        self._hooks = hooks
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
         # Igual que AmazonPipeline._expanded: solo se spawnea el thread de resolución
@@ -161,7 +219,11 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         # Shopee puros) no paga ese costo.
         if self._matt_word and self._matt_tool and has_meli_shortlinks(text):
             auto_msg = await asyncio.to_thread(
-                build_mercadolivre_auto_post, text, self._matt_word, self._matt_tool
+                build_mercadolivre_auto_post,
+                text,
+                self._matt_word,
+                self._matt_tool,
+                hook=self._hooks.next() if self._hooks else None,
             )
             if auto_msg:
                 key = self.dedup_key(text)
