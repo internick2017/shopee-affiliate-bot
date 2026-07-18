@@ -5,11 +5,13 @@ listo para pasar a WhatsApp.
 
 Las ofertas de **Amazon** se monetizan solas: el bot cambia el tag de afiliado por el
 tuyo y arma el post con el estilo de Lanny. Las de **Mercado Livre** también se intentan
-monetizar solas: si el shortlink `meli.la` resuelve a un producto puntual, el bot arma el
-post con tu link propio y lo publica sin marca; si no resuelve (por ejemplo, un link de
-lista/colección en vez de un producto), cae a reenviar la oferta marcada a su canal para
-que generes el link a mano. Las de **Shopee** no se pueden re-taguear por URL, así que
-siempre llegan marcadas a su propio canal.
+monetizar solas, pero con un paso más: si el shortlink `meli.la` resuelve a un producto
+puntual y tiene descuento comprobable, el bot arma un post propio con el template de
+Lanny y los datos reales de Mercado Livre (título, precio, descuento) consultados al
+momento de publicar, no el texto de la fuente; si no resuelve (por ejemplo, un link de
+lista/colección en vez de un producto) o no hay descuento comprobable, cae a reenviar la
+oferta marcada a su canal para que generes el link a mano. Las de **Shopee** no se pueden
+re-taguear por URL, así que siempre llegan marcadas a su propio canal.
 
 ## Cómo funciona
 
@@ -23,7 +25,7 @@ El mensaje que no reclama nadie se descarta.
 |---|---|---|---|
 | `AmazonPipeline` | `amazon.com.br/dp/...`, `link.amazon/...`, `amzn.to/...` | re-taguea y arma el post | `TARGET_CHANNEL_ID` |
 | `ShopeeReviewPipeline` | `shopee.com.br`, `shp.ee` | reenvía marcado | `SHOPEE_CHANNEL_ID` |
-| `MercadoLivreReviewPipeline` | `meli.la`, `mercadolivre.com` | auto-monetiza si el link resuelve; si no, reenvía marcado | `ML_CHANNEL_ID` |
+| `MercadoLivreReviewPipeline` | `meli.la`, `mercadolivre.com` | arma post propio (template Lanny + datos reales) si el link resuelve con descuento; si no, reenvía marcado | `ML_CHANNEL_ID` |
 
 Detalles que no se ven en la tabla:
 
@@ -53,10 +55,10 @@ Detalles que no se ven en la tabla:
    - `AMAZON_TAG`: tu tag de afiliado de Amazon (sin esto el bot no arranca)
    - `TARGET_CHANNEL_ID`: canal de los posts de Amazon
    - `SHOPEE_CHANNEL_ID` / `ML_CHANNEL_ID`: canal de Shopee (siempre reenvío manual) y de
-     Mercado Livre (auto-monetizado o reenvío manual, según si el link resuelve). Los
-     canales se buscan **por nombre** entre tus chats. Si dejas uno vacío, esas ofertas
-     van al canal principal con un warning; si lo pones y el canal no existe, el bot
-     **no arranca** (mejor fallar que publicar en el canal equivocado).
+     Mercado Livre (post propio o reenvío manual, según si el link resuelve con
+     descuento). Los canales se buscan **por nombre** entre tus chats. Si dejas uno
+     vacío, esas ofertas van al canal principal con un warning; si lo pones y el canal
+     no existe, el bot **no arranca** (mejor fallar que publicar en el canal equivocado).
    - `ML_MATT_WORD` / `ML_MATT_TOOL`: tag de campaña y cuenta de afiliado de Mercado
      Livre, de la Central de Afiliados de Mercado Livre (perfil > tus datos). Vacíos =
      el bot nunca intenta el post automático y todas las ofertas de ML van marcadas a

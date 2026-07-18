@@ -168,6 +168,7 @@ async def main() -> None:
         dedup=dedup,
         matt_word=cfg["ml_matt_word"],
         matt_tool=cfg["ml_matt_tool"],
+        hooks=hookbank,
     )
     # Amazon primero: es el único que monetiza solo. Se rinde ante un mensaje con
     # links de Mercado Livre, así que esas ofertas caen al handler de ML.
