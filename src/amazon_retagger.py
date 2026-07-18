@@ -2,10 +2,10 @@ import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .links import AMAZON_LINK_RE
+from .review_forward import FOOTER_MARKERS
 
 _AMAZON_RE = AMAZON_LINK_RE
 _MERCADOLIVRE_MARKERS = ("meli.la/", "mercadolivre.com")
-_FOOTER_MARKERS = ("grupos de promos", "ctlinks.com.br")
 
 # El ASIN identifica al producto: 10 caracteres alfanuméricos en mayúscula tras
 # /dp/ o /gp/product/. Es la clave estable para deduplicar entre grupos, porque
@@ -79,7 +79,7 @@ def build_amazon_post(text: str | None, tag: str) -> str | None:
     filtered_lines = [
         line
         for line in lines
-        if not any(marker in line.lower() for marker in _FOOTER_MARKERS)
+        if not any(marker in line.lower() for marker in FOOTER_MARKERS)
     ]
     result = "\n".join(filtered_lines)
 
