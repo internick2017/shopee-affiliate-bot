@@ -78,3 +78,35 @@ def test_hookbank_empty_raises():
 
     with pytest.raises(ValueError):
         HookBank([])
+
+
+def test_build_post_inserta_lineas_extra_despues_del_precio():
+    producto = Product(
+        item_id=0,
+        shop_id=0,
+        name="Kit Camisetas",
+        price_final=Decimal("284.99"),
+        image_url="",
+        price_original=Decimal("625.29"),
+        affiliate_link="https://ml/x",
+    )
+
+    post = build_post(producto, "GANCHO", extra_lines=("🏷️ 54% OFF no Pix",))
+
+    assert "✅ Por: R$ 284,99 😱🛒\n🏷️ 54% OFF no Pix\n\n🛒 Compre aqui:" in post
+
+
+def test_build_post_sin_extras_no_cambia():
+    producto = Product(
+        item_id=0,
+        shop_id=0,
+        name="Kit Camisetas",
+        price_final=Decimal("284.99"),
+        image_url="",
+        affiliate_link="https://ml/x",
+    )
+
+    assert build_post(producto, "GANCHO") == build_post(
+        producto, "GANCHO", extra_lines=()
+    )
+    assert "🏷️" not in build_post(producto, "GANCHO")
