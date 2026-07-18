@@ -1,8 +1,12 @@
+from decimal import Decimal
+
 from src.mercadolivre_resolver import (
+    MercadoLivreOffer,
     build_own_mercadolivre_links,
     extract_meli_shortlinks,
     has_meli_shortlinks,
     resolve_mercadolivre_item,
+    resolve_mercadolivre_offer,
     resolve_mercadolivre_url,
     retag_mercadolivre_url,
 )
@@ -330,3 +334,107 @@ def test_resolve_url_returns_none_when_close_raises():
         resolve_mercadolivre_url("https://meli.la/1Q8EMBW", http_get=_get_broken_close)
         is None
     )
+
+
+# --- datos del producto (post propio) ---
+
+# Recorte REAL de /social/<afiliado> para meli.la/1VHk77B, bajado el 2026-07-18.
+# Nota: "components" es una lista de bloques tipados (así llega de verdad), no un dict
+# con "title"/"price" como claves directas.
+_POLYCARD_BODY = (
+    '<html><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+    '"event_data":{"page_type":"affiliate-profile","item_id":"MLB5960042952"}},'
+    '"polycards":[{"unique_id":"23534c1719f75a2ebc4",'
+    '"metadata":{"id":"MLB5960042952",'
+    '"url":"produto.mercadolivre.com.br\\u002FMLB-5960042952-kit-camisetas'
+    '-tommy-hilfiger-chest-insert-brancapreta-2un-_JM"},'
+    '"components":['
+    '{"type":"title","id":"title","title":{'
+    '"text":"Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un",'
+    '"long_title":false}},'
+    '{"type":"seller","id":"seller"},'
+    '{"type":"price","id":"price","column":1,"price":{'
+    '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
+    '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
+    '"discount_label":{"text":"54% OFF no Pix"}'
+    '}}'
+    ']}]}</script></body></html>'
+)
+
+
+def test_resolve_offer_devuelve_titulo_precio_y_descuento():
+    offer = resolve_mercadolivre_offer(
+        "https://meli.la/1VHk77B", http_get=_fake_get(_POLYCARD_BODY)
+    )
+
+    assert offer is not None
+    assert offer.titulo == "Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un"
+    assert offer.precio == Decimal("284.99")
+    assert offer.precio_previo == Decimal("625.29")
+    assert offer.descuento == "54% OFF no Pix"
+    assert offer.url_canonica == (
+        "https://produto.mercadolivre.com.br/MLB-5960042952-kit-camisetas"
+        "-tommy-hilfiger-chest-insert-brancapreta-2un-_JM"
+    )
+    assert offer.tiene_descuento is True
+
+
+def test_resolve_offer_sin_precio_previo_ni_etiqueta_no_tiene_descuento():
+    body = _POLYCARD_BODY.replace(
+        '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},',
+        "",
+    ).replace('"discount_label":{"text":"54% OFF no Pix"}', '"x":1')
+    offer = resolve_mercadolivre_offer("https://meli.la/X", http_get=_fake_get(body))
+
+    assert offer is not None
+    assert offer.precio_previo is None
+    assert offer.descuento is None
+    assert offer.tiene_descuento is False
+
+
+def test_resolve_offer_none_cuando_no_hay_item_id():
+    assert resolve_mercadolivre_offer(
+        "https://meli.la/X", http_get=_fake_get("pagina sin melidata")
+    ) is None
+
+
+def test_resolve_offer_none_cuando_no_hay_polycard():
+    # el item_id resuelve pero no hay bloque de producto (ej. una pagina vieja/simple)
+    assert resolve_mercadolivre_offer(
+        "https://meli.la/X", http_get=_fake_get(_PRODUCT_BODY)
+    ) is None
+
+
+def test_resolve_offer_none_en_error_de_red():
+    assert resolve_mercadolivre_offer("https://meli.la/X", http_get=_boom) is None
+
+
+def test_resolve_offer_conserva_acentos_del_titulo():
+    # la comilla dentro del titulo va ESCAPADA en el JSON real ( \" , dos
+    # caracteres: backslash + comilla). El string de reemplazo de abajo la
+    # escribe tal cual se vería en el JSON de verdad — si en vez de esto se
+    # pusiera una comilla cruda, el fixture quedaría con JSON inválido, no
+    # representaría el caso real que este test intenta cubrir.
+    body = _POLYCARD_BODY.replace(
+        "Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un",
+        'Coração de Chocolate Ração 14\\" Premium',
+    )
+    offer = resolve_mercadolivre_offer("https://meli.la/X", http_get=_fake_get(body))
+
+    assert offer is not None
+    # tras el parseo, json.loads ya decodificó \" a una comilla literal
+    assert offer.titulo == 'Coração de Chocolate Ração 14" Premium'
+
+
+def test_resolve_offer_no_confunde_precio_de_cuotas_con_precio_real():
+    # el precio total de las cuotas (299.99) vive mas adentro que el precio real
+    # (284.99): si _buscar bajara antes de tiempo, tomaria el equivocado.
+    body = _POLYCARD_BODY.replace(
+        '"discount_label":{"text":"54% OFF no Pix"}',
+        '"discount_label":{"text":"54% OFF no Pix"},'
+        '"installments":{"values":[{"type":"price","price":{"value":299.99}}]}',
+    )
+    offer = resolve_mercadolivre_offer("https://meli.la/X", http_get=_fake_get(body))
+
+    assert offer is not None
+    assert offer.precio == Decimal("284.99")

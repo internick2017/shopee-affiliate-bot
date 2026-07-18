@@ -17,10 +17,13 @@ item_id, un campo "url" con la ruta REAL del producto (`/up/{user_product_id}`,
 desenvolver). Cuando no se encuentra ese campo (típicamente porque el item_id YA es un
 ID de catálogo), se cae al `/p/{item_id}` de siempre, que funciona para ese caso.
 """
+import json
 import logging
 import re
 import urllib.parse
 from collections.abc import Callable
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import requests
@@ -212,3 +215,153 @@ def build_own_mercadolivre_links(
             return None
         resolved[link] = retag_mercadolivre_url(base_url, matt_word, matt_tool)
     return resolved
+
+
+@dataclass
+class MercadoLivreOffer:
+    """Datos reales del producto, leídos de la página de ML al momento de publicar."""
+
+    titulo: str
+    precio: Decimal
+    url_canonica: str
+    precio_previo: Decimal | None = None
+    descuento: str | None = None
+
+    @property
+    def tiene_descuento(self) -> bool:
+        """Sin descuento comprobable no es una oferta y no se publica como tal."""
+        if self.descuento:
+            return True
+        return self.precio_previo is not None and self.precio_previo > self.precio
+
+
+def _extract_polycard(item_id: str, body: str) -> dict | None:
+    """Devuelve el polycard cuyo metadata.id coincide con item_id, ya parseado.
+
+    `json.loads` directo sobre `body`: no hace falta desescapar nada, las comillas de
+    esta página ya son reales (verificado contra la web viva, no es una suposición).
+    Se ubica el bloque por posición (buscando el `"id":"<item_id>"` y retrocediendo
+    hasta el `{"unique_id"` que lo contiene) y se parsea con conteo de llaves
+    balanceadas, en vez de con una regex de campos sueltos: la forma interna de cada
+    componente varía (`price` puede colgar directo del bloque o de más adentro) y una
+    regex sobre una ventana fija se rompe con esas variaciones.
+    """
+    idx = body.find('"id":"%s"' % item_id)
+    if idx < 0:
+        return None
+    start = body.rfind('{"unique_id"', max(0, idx - 20000), idx)
+    if start < 0:
+        return None
+    depth = 0
+    for i in range(start, min(len(body), start + 40000)):
+        if body[i] == "{":
+            depth += 1
+        elif body[i] == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(body[start : i + 1])
+                except ValueError:
+                    return None
+    return None
+
+
+def _buscar(obj, clave: str):
+    """Primera aparición de `clave` en cualquier nivel del dict/list.
+
+    Revisa las claves del nivel actual ANTES de bajar a los hijos. Es lo que evita
+    confundir el precio real (`components[2]["price"]`, directo) con el precio total
+    de las cuotas, que vive mucho más adentro
+    (`components[2]["price"]["installments"]["values"][1]["price"]`): al encontrar
+    `"price"` en el nivel de arriba, se devuelve ahí mismo sin seguir bajando.
+    """
+    if isinstance(obj, dict):
+        if clave in obj:
+            return obj[clave]
+        for valor in obj.values():
+            hallado = _buscar(valor, clave)
+            if hallado is not None:
+                return hallado
+    elif isinstance(obj, list):
+        for valor in obj:
+            hallado = _buscar(valor, clave)
+            if hallado is not None:
+                return hallado
+    return None
+
+
+def _a_decimal(valor) -> Decimal | None:
+    """`Decimal(str(valor))`, nunca `Decimal(valor)` directo: un float como 284.99
+    no es exacto en binario, y pasarlo crudo a Decimal arrastra ese error."""
+    if valor is None:
+        return None
+    try:
+        return Decimal(str(valor))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def resolve_mercadolivre_offer(
+    url: str, *, http_get=_default_get
+) -> MercadoLivreOffer | None:
+    """Título, precio y descuento reales del producto detrás del shortlink.
+
+    Un solo fetch, el mismo que ya se hacía para resolver la URL. None si algo falta:
+    el caller cae al reenvío manual. Nunca lanza.
+    """
+    try:
+        response = http_get(url)
+        try:
+            body = response.text
+        finally:
+            close = getattr(response, "close", None)
+            if close is not None:
+                close()
+    except Exception as exc:  # noqa: BLE001 - degradación segura, se loguea
+        logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
+        return None
+
+    try:
+        item_id = _extract_item_id(body)
+        if not item_id:
+            return None
+        card = _extract_polycard(item_id, body)
+        if not card:
+            return None
+
+        titulo_obj = _buscar(card, "title")
+        titulo = titulo_obj.get("text") if isinstance(titulo_obj, dict) else None
+        precio_obj = _buscar(card, "price")
+        if not isinstance(precio_obj, dict) or not titulo:
+            return None
+
+        actual = precio_obj.get("current_price")
+        precio = _a_decimal(
+            actual.get("value") if isinstance(actual, dict) else precio_obj.get("value")
+        )
+        if precio is None:
+            return None
+
+        previo_obj = precio_obj.get("previous_price")
+        precio_previo = _a_decimal(
+            previo_obj.get("value") if isinstance(previo_obj, dict) else None
+        )
+        etiqueta = _buscar(card, "discount_label")
+        descuento = etiqueta.get("text") if isinstance(etiqueta, dict) else None
+
+        metadata = card.get("metadata") or {}
+        ruta = metadata.get("url")
+        if not ruta:
+            return None
+        canonica = ruta if ruta.startswith("http") else f"https://{ruta}"
+
+        return MercadoLivreOffer(
+            titulo=titulo,
+            precio=precio,
+            url_canonica=canonica,
+            precio_previo=precio_previo,
+            descuento=descuento,
+        )
+    except Exception as exc:  # noqa: BLE001 - el formato es interno de ML, puede cambiar
+        logger.warning("No se pudo leer el producto de Mercado Livre %s: %s", url, exc)
+        return None
