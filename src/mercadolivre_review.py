@@ -12,6 +12,7 @@ sigue reenviando marcado para que Nick lo genere a mano.
 """
 import asyncio
 import logging
+import re
 from collections.abc import Callable
 
 from .links import MERCADOLIVRE_LINK_RE, foreign_link_res
@@ -33,10 +34,60 @@ PLATFORM = "ml"
 
 DEFAULT_MARKER = "⚠️ MERCADO LIVRE: gerar link de afiliado e postar manual"
 
+# El código va tras la palabra "cupom", con o sin ":" y con hasta 30 caracteres en el
+# medio ("CUPOM Exclusivo Amazon Prime: XXX"). Piezas del patrón, cada una corrigiendo
+# un fallo real encontrado al probarlo contra los 600 mensajes de la medición:
+#   - `(?i:cupom)`: solo la palabra "cupom" es case-insensitive (las fuentes escriben
+#     "CUPOM", "Cupom", "cupom" sin criterio). El resto del patrón NO hereda ese flag.
+#   - `\b(...)`: word boundary ANTES del grupo de captura. Sin esto, el relleno
+#     `[^\n:]{0,30}` (greedy) puede backtrackear hasta la mitad de una palabra y
+#     capturar un sufijo — "MODA" en vez de "MELIMODA", "ADOS" en vez de
+#     "SELECIONADOS" — que se cuela porque el sufijo no está en la lista de
+#     stopwords aunque la palabra completa sí.
+#   - `(?=[A-Z0-9]*[A-Z])`: exige al menos UNA letra en el token. Sin esto,
+#     `[A-Z0-9]{4,25}` a secas matchea números sueltos de 4+ dígitos — un año como
+#     "2026" cerca de la palabra "cupom" se leería como código.
+#   - El código puede EMPEZAR con dígito ("15ACESS" es un cupón real de Promocasinha),
+#     por eso `[A-Z0-9]{4,25}` y no `[A-Z][A-Z0-9]{3,24}`.
+_CUPON_RE = re.compile(
+    r"(?i:cupom)\b[^\n:]{0,30}:?\s*\b(?=[A-Z0-9]*[A-Z])([A-Z0-9]{4,25})\b"
+)
+
+# Palabras que siguen a "cupom" en frases sueltas y NO son códigos. Salieron de medir
+# 600 mensajes reales de los 3 canales fuente el 2026-07-18: sin este filtro se
+# publicaba "CUPOM: MERCADO" o "CUPOM: SELECIONADOS", que no sirven de nada.
+_CUPON_STOPWORDS = frozenset({
+    "MERCADO", "LIVRE", "LOJA", "SELECIONADOS", "ESGOTADO", "LIMITADO", "SHOPEE",
+    "AMAZON", "PRODUTOS", "DESCONTO", "DESCONTOS", "EXCLUSIVO", "EXCLUSIVA", "PRIME",
+    "COMPRAS", "PIX", "FRETE", "GRATIS", "OFERTA", "OFERTAS", "PROMO", "VALIDO",
+})
+
+# Un cupón con la marca de un canal fuente puede ser de SU programa de afiliados: la
+# ayuda oficial de ML (mercadolivre.com.br/ajuda/35616) confirma que existen cupones
+# de afiliado, y activarlos manda al comprador al buscador de ML, fuera de nuestro
+# link. Los cupones de campaña de ML que SÍ circulan en las fuentes (SEMPRENAMODA,
+# MELIMODA) no llevan marca de nadie — verificado el 2026-07-18: los mismos códigos
+# aparecen en canales que compiten entre sí, lo que descarta que sean exclusivos.
+_MARCAS_FUENTE = ("IACHADOS", "CROWMAN", "PROMOCASINHA", "ACHADOS", "CASINHA")
+
 
 def has_mercadolivre_links(text: str | None) -> bool:
     """True si el texto contiene al menos un link de Mercado Livre."""
     return has_links(text, _MERCADOLIVRE_RE)
+
+
+def extract_cupon(text: str | None) -> str | None:
+    """El código de cupón del mensaje original, o None si no hay uno confiable."""
+    if not text:
+        return None
+    for match in _CUPON_RE.finditer(text):
+        codigo = match.group(1).upper()
+        if codigo in _CUPON_STOPWORDS:
+            continue
+        if any(marca in codigo for marca in _MARCAS_FUENTE):
+            continue
+        return codigo
+    return None
 
 
 def build_mercadolivre_review_message(

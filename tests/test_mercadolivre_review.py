@@ -5,6 +5,7 @@ from src.mercadolivre_review import (
     MercadoLivreReviewPipeline,
     build_mercadolivre_auto_post,
     build_mercadolivre_review_message,
+    extract_cupon,
     has_mercadolivre_links,
     mercadolivre_dedup_key,
 )
@@ -363,3 +364,52 @@ def test_auto_post_strips_source_channel_signature():
     assert "IAchados" not in msg
     # el cupón le sirve al comprador: se conserva
     assert "SEMPRENAMODA" in msg
+
+
+def test_extract_cupon_toma_el_codigo():
+    assert extract_cupon("🥇 CUPOM: SEMPRENAMODA") == "SEMPRENAMODA"
+    assert extract_cupon("Cupom MELIMODA no carrinho") == "MELIMODA"
+    assert extract_cupon("🎟 CUPOM Exclusivo: ALLSITE217") == "ALLSITE217"
+
+
+def test_extract_cupon_ignora_palabras_comunes():
+    # la fuente escribe "cupom" en frases sueltas; no todo lo que sigue es un codigo
+    assert extract_cupon("Cupom Mercado Livre disponivel") is None
+    assert extract_cupon("cupom para produtos SELECIONADOS") is None
+    assert extract_cupon("CUPOM ESGOTADO") is None
+
+
+def test_extract_cupon_descarta_cupon_del_canal_fuente():
+    # un cupon con la marca de la fuente puede ser de SU afiliado: no se republica
+    assert extract_cupon("CUPOM: IACHADOS10") is None
+    assert extract_cupon("CUPOM: CROWMAN5") is None
+
+
+def test_extract_cupon_sin_cupon():
+    assert extract_cupon("oferta sin cupon") is None
+    assert extract_cupon(None) is None
+
+
+def test_extract_cupon_toma_el_primero():
+    texto = "CUPOM: PRIMEIRO\noutro CUPOM: SEGUNDO"
+    assert extract_cupon(texto) == "PRIMEIRO"
+
+
+def test_extract_cupon_acepta_codigo_con_digito_inicial():
+    # "15ACESS" es un cupon real visto en Promocasinha (medicion del 2026-07-18)
+    assert extract_cupon("CUPOM: 15ACESS") == "15ACESS"
+
+
+def test_extract_cupon_no_confunde_un_anio_suelto_con_codigo():
+    # riesgo real de aceptar digitos: un año o numero suelto cerca de "cupom" no es
+    # un codigo. Se exige al menos una letra en el token para evitarlo.
+    assert extract_cupon("cupom valido ate 2026, aproveite") is None
+
+
+def test_extract_cupon_no_matchea_mitad_de_palabra():
+    # regresion: sin \b antes del grupo de captura, el backtracking greedy del
+    # relleno puede matchear un SUFIJO de una palabra ("MODA" en vez de
+    # "MELIMODA", "ADOS" en vez de "SELECIONADOS") y esos sufijos se cuelan
+    # porque no estan en la lista de stopwords.
+    assert extract_cupon("Cupom MELIMODA no carrinho") == "MELIMODA"
+    assert extract_cupon("cupom para produtos SELECIONADOS") is None
