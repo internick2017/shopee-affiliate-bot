@@ -137,3 +137,26 @@ def test_pipeline_releases_the_key_when_posting_fails():
     poster._fail = False
     assert asyncio.run(pipe.handle(text)) == 1
     assert len(poster.posts) == 1
+
+
+def test_review_message_drops_foreign_block_whole_when_source_signs_it():
+    """Guard: la firma del canal se limpia por su línea, no por su nombre suelto.
+
+    El tag de afiliado ajeno (`iachadospromo-20`) vive DENTRO de la URL de Amazon. Un
+    marcador ingenuo ("iachados") borraría esa línea de link y dejaría el nombre y el
+    precio huérfanos, que `drop_foreign_blocks` conserva por ser un bloque sin links:
+    basura de otra plataforma en el canal de Shopee.
+    """
+    text = (
+        "Produto Shopee\n"
+        "https://shopee.com.br/product/123/456\n\n"
+        "Produto Amazon\n"
+        "https://www.amazon.com.br/dp/B07QZB3PDY?tag=iachadospromo-20\n\n"
+        "🛍️ IAchados"
+    )
+    msg = build_review_message(text, SHOPEE_LINK_RE, "MARCA", platform="shopee")
+
+    assert msg is not None
+    assert "IAchados" not in msg          # la firma se va
+    assert "Produto Shopee" in msg        # lo nuestro queda
+    assert "Produto Amazon" not in msg    # el bloque ajeno se va ENTERO, sin huérfanos

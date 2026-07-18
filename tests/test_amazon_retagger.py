@@ -105,3 +105,23 @@ def test_extract_amazon_links_strips_trailing_punctuation():
     """Una URL con el punto pegado no se puede postear ni re-taguear."""
     links = extract_amazon_links("veja https://www.amazon.com.br/dp/B07L5BPDV7. agora")
     assert links == ["https://www.amazon.com.br/dp/B07L5BPDV7"]
+
+
+def test_build_amazon_post_strips_source_channel_signature():
+    """La firma del canal fuente (IAchados) no se publica en el canal de Lanny.
+
+    Crowman firma con "Grupos de promos"/ctlinks; IAchados firma con su nombre al pie.
+    """
+    text = (
+        "🔥 Smirnoff Vodka 600Ml\n\n"
+        "💵 R$ 19\n"
+        "https://www.amazon.com.br/dp/B07QZB3PDY?tag=iachadospromo-20\n\n"
+        "🛍️ IAchados"
+    )
+    post = build_amazon_post(text, TAG)
+
+    assert post is not None
+    assert "IAchados" not in post
+    # el producto y su link retagueado siguen intactos
+    assert "Smirnoff" in post
+    assert f"dp/B07QZB3PDY?tag={TAG}" in post

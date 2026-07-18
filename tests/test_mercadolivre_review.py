@@ -343,3 +343,23 @@ def test_pipeline_skips_auto_thread_without_ml_shortlinks():
 
     assert result == 0
     assert poster.posts == []
+
+
+def test_auto_post_strips_source_channel_signature():
+    """El post auto-monetizado tampoco lleva la firma del canal fuente."""
+    text = (
+        "TÊNIS PERFEITO🏃\n\n"
+        "👟 Tênis Masculino Vl Court 3.0 Adidas\n\n"
+        "🔥 DE 399 | POR 213,19 no pix\n"
+        "🥇 CUPOM: SEMPRENAMODA\n\n"
+        "https://meli.la/1Q8EMBW\n\n"
+        "🛍️ IAchados"
+    )
+    msg = build_mercadolivre_auto_post(
+        text, "lannybot", "56889681", http_get=_fake_ml_get(_PRODUCT_BODY)
+    )
+
+    assert msg is not None
+    assert "IAchados" not in msg
+    # el cupón le sirve al comprador: se conserva
+    assert "SEMPRENAMODA" in msg

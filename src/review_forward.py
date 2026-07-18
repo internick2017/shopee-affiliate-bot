@@ -16,8 +16,15 @@ from .posting import post_offer
 
 logger = logging.getLogger(__name__)
 
-# Footer del competidor: mismos marcadores que usa amazon_retagger.
-FOOTER_MARKERS = ("grupos de promos", "ctlinks.com.br")
+# Firmas de los canales fuente: no se republican en los canales de Lanny. Crowman
+# firma con "Grupos de promos" + su link; IAchados firma con su nombre al pie.
+# Fuente única: amazon_retagger importa esta misma tupla (antes tenía su propia copia,
+# que había que acordarse de mantener en sincronía).
+#
+# El espacio inicial de " iachados" NO es un descuido: su tag de afiliado
+# (`iachadospromo-20`) vive DENTRO de las URLs, sin espacio delante. Sin ese espacio el
+# filtro borraría la línea del link entero y dejaría el producto huérfano.
+FOOTER_MARKERS = ("grupos de promos", "ctlinks.com.br", " iachados")
 
 
 def has_links(text: str | None, link_re: re.Pattern) -> bool:
