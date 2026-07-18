@@ -438,3 +438,40 @@ def test_resolve_offer_no_confunde_precio_de_cuotas_con_precio_real():
 
     assert offer is not None
     assert offer.precio == Decimal("284.99")
+
+
+# Polycard con metadata.url envuelta en un deep-link de Adjust (adj.st) sin desenvolver.
+# Combina la estructura real de _POLYCARD_BODY (título, precio, descuento válidos) con
+# el patrón real de adj.st-wrapped URL de _ADJST_WRAPPED_BODY. Propósito: probar que
+# resolve_mercadolivre_offer degrada a None en lugar de devolver un url_canonica roto.
+_POLYCARD_WITH_ADJST_URL_BODY = (
+    '<html><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+    '"event_data":{"page_type":"affiliate-profile","item_id":"MLB5960042952"}},'
+    '"polycards":[{"unique_id":"23534c1719f75a2ebc4",'
+    '"metadata":{"id":"MLB5960042952",'
+    '"url":"ddnf.adj.st\\u002Fwebview\\u002F",'
+    '"url_params":"?adj_campaign=social&adj_t=1y8rwb1z&url=https%3A%2F%2Fwww.'
+    'mercadolivre.com.br%2FMLB-5960042952-kit-camisetas-tommy-hilfiger%2Fp%2FMLB5960042952"},'
+    '"components":['
+    '{"type":"title","id":"title","title":{'
+    '"text":"Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un",'
+    '"long_title":false}},'
+    '{"type":"seller","id":"seller"},'
+    '{"type":"price","id":"price","column":1,"price":{'
+    '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
+    '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
+    '"discount_label":{"text":"54% OFF no Pix"}'
+    '}}'
+    ']}]}</script></body></html>'
+)
+
+
+def test_resolve_offer_none_cuando_url_es_deeplink_sin_desenvolver():
+    """Cuando metadata.url es un adj.st deep-link sin desenvolver, degradar a None en
+    lugar de devolver un url_canonica roto. El caso es raro (49 links medidos el
+    2026-07-18, zero adj.st en resolve_mercadolivre_offer), pero más seguro que
+    publicar un link que no funciona."""
+    offer = resolve_mercadolivre_offer(
+        "https://meli.la/1VHk77B", http_get=_fake_get(_POLYCARD_WITH_ADJST_URL_BODY)
+    )
+    assert offer is None

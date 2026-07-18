@@ -353,6 +353,15 @@ def resolve_mercadolivre_offer(
         ruta = metadata.get("url")
         if not ruta:
             return None
+        if "adj.st" in ruta:
+            # Deep-link de Adjust sin desenvolver. _extract_canonical_url (más abajo en
+            # este módulo) sí lo desenvuelve para el camino viejo
+            # (resolve_mercadolivre_url); acá se prefiere degradar a None y caer al
+            # reenvío marcado antes que duplicar esa lógica para un caso que, en la
+            # medición real de 50 links (2026-07-18), no se dio ni una vez. Publicar el
+            # deep-link tal cual sería peor que no publicar nada: un link roto con la
+            # marca propia encima.
+            return None
         canonica = ruta if ruta.startswith("http") else f"https://{ruta}"
 
         return MercadoLivreOffer(
