@@ -5,6 +5,7 @@ from src.mercadolivre_review import (
     MercadoLivreReviewPipeline,
     build_mercadolivre_auto_post,
     build_mercadolivre_review_message,
+    extract_cupon,
     has_mercadolivre_links,
     mercadolivre_dedup_key,
 )
@@ -363,3 +364,135 @@ def test_auto_post_strips_source_channel_signature():
     assert "IAchados" not in msg
     # el cupón le sirve al comprador: se conserva
     assert "SEMPRENAMODA" in msg
+
+
+def test_extract_cupon_toma_el_codigo():
+    assert extract_cupon("🥇 CUPOM: SEMPRENAMODA") == "SEMPRENAMODA"
+    assert extract_cupon("Cupom MELIMODA no carrinho") == "MELIMODA"
+    assert extract_cupon("🎟 CUPOM Exclusivo: ALLSITE217") == "ALLSITE217"
+
+
+def test_extract_cupon_ignora_palabras_comunes():
+    # la fuente escribe "cupom" en frases sueltas; no todo lo que sigue es un codigo
+    assert extract_cupon("Cupom Mercado Livre disponivel") is None
+    assert extract_cupon("cupom para produtos SELECIONADOS") is None
+    assert extract_cupon("CUPOM ESGOTADO") is None
+
+
+def test_extract_cupon_descarta_cupon_del_canal_fuente():
+    # un cupon con la marca de la fuente puede ser de SU afiliado: no se republica
+    assert extract_cupon("CUPOM: IACHADOS10") is None
+    assert extract_cupon("CUPOM: CROWMAN5") is None
+
+
+def test_extract_cupon_sin_cupon():
+    assert extract_cupon("oferta sin cupon") is None
+    assert extract_cupon(None) is None
+
+
+def test_extract_cupon_toma_el_primero():
+    texto = "CUPOM: PRIMEIRO\noutro CUPOM: SEGUNDO"
+    assert extract_cupon(texto) == "PRIMEIRO"
+
+
+def test_extract_cupon_acepta_codigo_con_digito_inicial():
+    # "15ACESS" es un cupon real visto en Promocasinha (medicion del 2026-07-18)
+    assert extract_cupon("CUPOM: 15ACESS") == "15ACESS"
+
+
+def test_extract_cupon_no_confunde_un_anio_suelto_con_codigo():
+    # riesgo real de aceptar digitos: un año o numero suelto cerca de "cupom" no es
+    # un codigo. Se exige al menos una letra en el token para evitarlo.
+    assert extract_cupon("cupom valido ate 2026, aproveite") is None
+
+
+def test_extract_cupon_no_matchea_mitad_de_palabra():
+    # regresion: sin \b antes del grupo de captura, el backtracking greedy del
+    # relleno puede matchear un SUFIJO de una palabra ("MODA" en vez de
+    # "MELIMODA", "ADOS" en vez de "SELECIONADOS") y esos sufijos se cuelan
+    # porque no estan en la lista de stopwords.
+    assert extract_cupon("Cupom MELIMODA no carrinho") == "MELIMODA"
+    assert extract_cupon("cupom para produtos SELECIONADOS") is None
+
+
+# Mismo fixture real que en test_mercadolivre_resolver.py (ver Task 1 del plan de
+# 2026-07-18), copiado acá porque los tests no comparten fixtures entre archivos.
+_POLYCARD_BODY_REVIEW = (
+    '<html><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
+    '"event_data":{"page_type":"affiliate-profile","item_id":"MLB5960042952"}},'
+    '"polycards":[{"unique_id":"23534c1719f75a2ebc4",'
+    '"metadata":{"id":"MLB5960042952",'
+    '"url":"produto.mercadolivre.com.br\\u002FMLB-5960042952-kit-camisetas'
+    '-tommy-hilfiger-chest-insert-brancapreta-2un-_JM"},'
+    '"components":['
+    '{"type":"title","id":"title","title":{'
+    '"text":"Kit Camisetas Tommy Hilfiger Chest Insert Branca/preta 2un",'
+    '"long_title":false}},'
+    '{"type":"seller","id":"seller"},'
+    '{"type":"price","id":"price","column":1,"price":{'
+    '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
+    '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
+    '"discount_label":{"text":"54% OFF no Pix"}'
+    '}}'
+    ']}]}</script></body></html>'
+)
+
+
+def test_auto_post_arma_post_propio_con_datos_de_ml():
+    texto = (
+        "TENIS PERFEITO\n"
+        "🔥 DE 399 | POR 213,19\n"
+        "🥇 CUPOM: SEMPRENAMODA\n"
+        "https://meli.la/1VHk77B\n"
+        "🛍️ IAchados"
+    )
+
+    msg = build_mercadolivre_auto_post(
+        texto, "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+    )
+
+    assert msg is not None
+    # datos REALES de ML, no los del post ajeno
+    assert "Kit Camisetas Tommy Hilfiger" in msg
+    assert "R$ 284,99" in msg
+    assert "R$ 625,29" in msg
+    assert "213,19" not in msg
+    # la etiqueta se publica tal cual: comunica la condicion "no Pix"
+    assert "54% OFF no Pix" in msg
+    # el cupon se rescata del mensaje original
+    assert "CUPOM: SEMPRENAMODA" in msg
+    # nada de la fuente
+    assert "IAchados" not in msg
+    assert "TENIS PERFEITO" not in msg
+    # el link propio, canonico (no /p/{item_id})
+    assert "produto.mercadolivre.com.br" in msg
+    assert "matt_word=lannybot" in msg
+    assert "matt_tool=56889681" in msg
+
+
+def test_auto_post_sin_descuento_no_publica_ni_cae_al_camino_viejo():
+    """Sin descuento comprobable no es oferta: None directo, no el reemplazo de links."""
+    body = _POLYCARD_BODY_REVIEW.replace(
+        '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},',
+        "",
+    ).replace('"discount_label":{"text":"54% OFF no Pix"}', '"x":1')
+
+    msg = build_mercadolivre_auto_post(
+        "oferta\nhttps://meli.la/1VHk77B", "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(body),
+    )
+
+    assert msg is None
+
+
+def test_auto_post_con_hook_y_multiples_links_no_publica():
+    """Un post con varios productos no se puede armar como UN post propio: reenvio marcado."""
+    texto = "https://meli.la/AAA\nhttps://meli.la/BBB"
+
+    msg = build_mercadolivre_auto_post(
+        texto, "lannybot", "56889681",
+        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+    )
+
+    assert msg is None
