@@ -251,3 +251,20 @@ def test_retag_shopee_url_error():
     )
 
     assert link is None
+
+
+def test_retag_shopee_url_generate_short_link_null():
+    # Regresión: GraphQL devuelve {"data": {"generateShortLink": null}} (null en vez
+    # de ausente). Sin la guarda, data.get("generateShortLink", {}).get("shortLink") falla
+    # porque None.get() lanza AttributeError. Con la guarda (data.get(...) or {}),
+    # degradamos seguramente a None.
+    body = {"data": {"generateShortLink": None}}
+    link = retag_shopee_url(
+        "https://shopee.com.br/m/sabadovip",
+        APP_ID,
+        SECRET,
+        ["lannybot"],
+        http_post=_fake_post(body),
+    )
+
+    assert link is None

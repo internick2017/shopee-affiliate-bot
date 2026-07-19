@@ -267,4 +267,4 @@ def retag_shopee_url(
     data = _graphql_call(app_id, secret, query, http_post=http_post)
     if not data:
         return None
-    return data.get("generateShortLink", {}).get("shortLink")
+    return (data.get("generateShortLink") or {}).get("shortLink")
