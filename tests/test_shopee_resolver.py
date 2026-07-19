@@ -2,7 +2,6 @@ import json
 from decimal import Decimal
 
 from src.shopee_resolver import (
-    ShopeeOffer,
     extract_shopee_shortlinks,
     resolve_shopee_offer,
     retag_shopee_url,

@@ -21,7 +21,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import requests
 
@@ -83,12 +83,19 @@ def _graphql_call(
     secret: str,
     query: str,
     *,
+    variables: dict | None = None,
     http_post: Callable[..., object] = _default_post,
 ) -> dict | None:
     """POST firmado a la API. Devuelve `data` en éxito, None ante cualquier fallo
     (red, HTTP != 200, o `errors` en el body — nunca se distingue el código de
-    error acá, todos degradan igual). Nunca lanza."""
-    payload = json.dumps({"query": query, "variables": {}}, separators=(",", ":"))
+    error acá, todos degradan igual). Nunca lanza.
+
+    `variables` va tal cual en el payload de GraphQL (vacío si no se pasa), para
+    los callers que declaran variables en su query en vez de interpolar valores
+    directo en el texto — ver `retag_shopee_url`."""
+    payload = json.dumps(
+        {"query": query, "variables": variables or {}}, separators=(",", ":")
+    )
     ts, sig = _firmar(app_id, secret, payload)
     headers = {
         "Content-Type": "application/json",
@@ -96,9 +103,10 @@ def _graphql_call(
     }
     try:
         response = http_post(_GRAPHQL_ENDPOINT, data=payload, headers=headers)
-        if response.status_code != 200:
+        if getattr(response, "status_code", None) != 200:
             return None
-        body = response.json()
+        json_method = getattr(response, "json", None)
+        body = json_method() if callable(json_method) else None
         if not isinstance(body, dict):
             logger.warning("La API de Shopee devolvió un JSON que no es un diccionario: %s", type(body))
             return None
@@ -147,7 +155,7 @@ def _resolve_redirect(
         close = getattr(response, "close", None)
         if callable(close):
             close()
-        return response.url
+        return getattr(response, "url", None)
     except Exception as exc:  # noqa: BLE001 - degradación segura, se loguea
         logger.warning("No se pudo resolver el link de Shopee %s: %s", shortlink, exc)
         return None
@@ -255,16 +263,26 @@ def retag_shopee_url(
 ) -> str | None:
     """Re-tagea CUALQUIER URL de Shopee a la cuenta de Nick (no solo productos —
     verificado en vivo con un link de campaña VIP, funciona igual). None ante
-    cualquier fallo. Nunca lanza."""
-    sub_ids_json = json.dumps(subids)
-    query = f"""
-    mutation {{
-      generateShortLink(input: {{originUrl: "{url}", subIds: {sub_ids_json}}}) {{
+    cualquier fallo. Nunca lanza.
+
+    `url` viene de seguir un redirect en vivo (más parecido a input externo que el
+    `itemId`/`shopId` de `resolve_shopee_offer`, que ya salen `int()`-coercionados
+    de un regex), así que va como variable de GraphQL en vez de interpolada en el
+    texto de la query."""
+    query = """
+    mutation GenerateShortLink($originUrl: String!, $subIds: [String!]) {
+      generateShortLink(input: {originUrl: $originUrl, subIds: $subIds}) {
         shortLink
-      }}
-    }}
+      }
+    }
     """
-    data = _graphql_call(app_id, secret, query, http_post=http_post)
+    data = _graphql_call(
+        app_id,
+        secret,
+        query,
+        variables={"originUrl": url, "subIds": subids},
+        http_post=http_post,
+    )
     if not data:
         return None
     return (data.get("generateShortLink") or {}).get("shortLink")

@@ -121,7 +121,7 @@ def build_shopee_auto_post(
 
     extra_link = None
     for link in no_producto:
-        from .shopee_resolver import _resolve_redirect, _default_get
+        from .shopee_resolver import _default_get, _resolve_redirect
 
         url_resuelta = _resolve_redirect(
             link, http_get=resolve_kwargs.get("http_get", _default_get)

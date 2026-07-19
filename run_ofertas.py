@@ -4,7 +4,7 @@ Multi-fuente: enruta cada mensaje por OfferPipeline, que prueba los handlers en 
 y usa el primero que lo reclame:
 
     Amazon         -> re-taguea el link y arma el post estilo Lanny (automático)
-    Shopee         -> reenvía marcado, para generar el link a mano
+    Shopee         -> post propio con datos reales si hay credenciales y descuento comprobable; si no, reenvía marcado
     Mercado Livre  -> reenvía marcado, para generar el link a mano
 
 Cada plataforma publica en su propio canal, y el post lleva la foto del mensaje original.
