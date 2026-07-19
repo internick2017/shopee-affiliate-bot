@@ -4,7 +4,7 @@ Multi-fuente: enruta cada mensaje por OfferPipeline, que prueba los handlers en 
 y usa el primero que lo reclame:
 
     Amazon         -> re-taguea el link y arma el post estilo Lanny (automático)
-    Shopee         -> reenvía marcado, para generar el link a mano
+    Shopee         -> post propio con datos reales si hay credenciales y descuento comprobable; si no, reenvía marcado
     Mercado Livre  -> reenvía marcado, para generar el link a mano
 
 Cada plataforma publica en su propio canal, y el post lleva la foto del mensaje original.
@@ -162,7 +162,13 @@ async def main() -> None:
     if expired:
         logging.info("Dedup: %d claves vencidas purgadas", expired)
     amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
-    shopee_review = ShopeeReviewPipeline(shopee_poster, dedup=dedup)
+    shopee_review = ShopeeReviewPipeline(
+        shopee_poster,
+        dedup=dedup,
+        app_id=cfg["shopee_app_id"],
+        secret=cfg["shopee_secret"],
+        hooks=hookbank,
+    )
     ml_review = MercadoLivreReviewPipeline(
         ml_poster,
         dedup=dedup,

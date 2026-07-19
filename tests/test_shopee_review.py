@@ -3,6 +3,7 @@ import asyncio
 from src.shopee_review import (
     DEFAULT_MARKER,
     ShopeeReviewPipeline,
+    build_shopee_auto_post,
     build_shopee_review_message,
     has_shopee_links,
     shopee_dedup_key,
@@ -115,3 +116,246 @@ def test_pipeline_without_dedup_forwards_twice():
     asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc"))
     asyncio.run(pipe.handle("🔗 https://s.shopee.com.br/abc"))
     assert len(poster.posts) == 2
+
+
+# --- post propio automático (Task 3) ---
+#
+# Los fakes de poster (FakePoster, con `post_text`) y de dedup (FakeDedup, importado
+# de tests.fakes) ya están definidos/importados arriba en este archivo y se reusan acá
+# tal cual — no se redefinen con otro nombre igual, porque una segunda definición de
+# `class FakePoster`/`class FakeDedup` más abajo pisaría el nombre a nivel de módulo y
+# rompería los tests preexistentes que dependen de esa interfaz (por ejemplo
+# `FakePoster.post_text`, que es lo que `post_offer` llama cuando no hay foto).
+
+APP_ID = "test_app_id"
+SECRET = "test_secret"
+
+
+class _FakeResponse:
+    def __init__(self, *, url=None, status_code=200, json_body=None):
+        self.url = url
+        self.status_code = status_code
+        self._json_body = json_body or {}
+
+    def json(self):
+        return self._json_body
+
+    def close(self):
+        pass
+
+
+def _fake_get_por_link(mapa_url):
+    """mapa_url: {shortlink: url_resuelta}. Cada shortlink resuelve a su propia URL."""
+
+    def get(url, **kwargs):
+        return _FakeResponse(url=mapa_url[url])
+
+    return get
+
+
+def _fake_post_por_query(respuestas):
+    """respuestas: lista de dicts que se van devolviendo en orden, uno por llamada."""
+    llamadas = {"n": 0}
+
+    def post(url, **kwargs):
+        resp = respuestas[llamadas["n"]]
+        llamadas["n"] += 1
+        return _FakeResponse(json_body=resp)
+
+    return post
+
+
+_PRODUCT_OFFER_BODY = {
+    "data": {
+        "productOfferV2": {
+            "nodes": [
+                {
+                    "productName": "Kit 10 Panos De Limpeza Microfibra",
+                    "price": "16.88",
+                    "priceDiscountRate": 83,
+                    "offerLink": "https://s.shopee.com.br/9pcpWfgiuH",
+                }
+            ]
+        }
+    }
+}
+
+_GENERATE_SHORT_LINK_OK = {
+    "data": {"generateShortLink": {"shortLink": "https://s.shopee.com.br/qi0pdhPjt"}}
+}
+
+
+def test_auto_post_un_producto_sin_extra():
+    texto = "Kit de panos incrivel\nhttps://s.shopee.com.br/PRODUTO"
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {"https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336"}
+        ),
+        http_post=_fake_post_por_query([_PRODUCT_OFFER_BODY]),
+    )
+
+    assert msg is not None
+    assert "Kit 10 Panos De Limpeza Microfibra" in msg
+    assert "R$ 16,88" in msg
+    assert "83% OFF" in msg
+    assert "s.shopee.com.br/9pcpWfgiuH" in msg
+    assert "🎟️" not in msg  # sin link extra, sin linea de cupon
+
+
+def test_auto_post_producto_mas_cupom():
+    texto = (
+        "Resgate aqui:\nhttps://s.shopee.com.br/CUPOM\n"
+        "Kit de panos:\nhttps://s.shopee.com.br/PRODUTO"
+    )
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {
+                "https://s.shopee.com.br/CUPOM": "https://shopee.com.br/m/sabadovip",
+                "https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336",
+            }
+        ),
+        http_post=_fake_post_por_query([_PRODUCT_OFFER_BODY, _GENERATE_SHORT_LINK_OK]),
+    )
+
+    assert msg is not None
+    assert "🎟️" in msg
+    assert "s.shopee.com.br/qi0pdhPjt" in msg
+
+
+def test_auto_post_producto_mas_link_no_cupom_se_ignora():
+    texto = (
+        "Ve o carrinho:\nhttps://s.shopee.com.br/CARRINHO\n"
+        "Kit de panos:\nhttps://s.shopee.com.br/PRODUTO"
+    )
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {
+                "https://s.shopee.com.br/CARRINHO": "https://shopee.com.br/cart/",
+                "https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336",
+            }
+        ),
+        # solo UNA llamada esperada: productOfferV2. Nunca se llama generateShortLink
+        # para el link de carrito, porque no matchea el patron de cupon.
+        http_post=_fake_post_por_query([_PRODUCT_OFFER_BODY]),
+    )
+
+    assert msg is not None
+    assert "🎟️" not in msg
+
+
+def test_auto_post_solo_cupom_sin_producto():
+    texto = "Ative o cupom:\nhttps://s.shopee.com.br/CUPOM"
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {"https://s.shopee.com.br/CUPOM": "https://shopee.com.br/m/sabadovip"}
+        ),
+        http_post=_fake_post_por_query([]),
+    )
+
+    assert msg is None
+
+
+def test_auto_post_dos_productos_es_ambiguo():
+    texto = (
+        "https://s.shopee.com.br/PRODUTO1\n"
+        "https://s.shopee.com.br/PRODUTO2"
+    )
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {
+                "https://s.shopee.com.br/PRODUTO1": "https://shopee.com.br/a-i.111.222",
+                "https://s.shopee.com.br/PRODUTO2": "https://shopee.com.br/b-i.333.444",
+            }
+        ),
+        http_post=_fake_post_por_query([_PRODUCT_OFFER_BODY, _PRODUCT_OFFER_BODY]),
+    )
+
+    assert msg is None
+
+
+def test_auto_post_sin_hook_es_none():
+    msg = build_shopee_auto_post(
+        "https://s.shopee.com.br/PRODUTO", APP_ID, SECRET, hook=None
+    )
+    assert msg is None
+
+
+def test_auto_post_retag_de_extra_falla_no_tumba_el_post():
+    texto = (
+        "https://s.shopee.com.br/CUPOM\n"
+        "https://s.shopee.com.br/PRODUTO"
+    )
+    error = {"errors": [{"extensions": {"code": 11001}}]}
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {
+                "https://s.shopee.com.br/CUPOM": "https://shopee.com.br/shopeevip",
+                "https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336",
+            }
+        ),
+        http_post=_fake_post_por_query([_PRODUCT_OFFER_BODY, error]),
+    )
+
+    assert msg is not None  # el producto se publica igual
+    assert "🎟️" not in msg  # pero sin la linea de cupon, que fallo
+
+
+async def test_pipeline_auto_posts_cuando_configurado_y_resuelve():
+    poster = FakePoster()
+    pipe = ShopeeReviewPipeline(
+        poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET
+    )
+
+    import src.shopee_review as module
+
+    original = module.build_shopee_auto_post
+
+    def fake_build(text, app_id, secret, **kwargs):
+        assert app_id == APP_ID
+        assert secret == SECRET
+        return "POST YA ARMADO"
+
+    module.build_shopee_auto_post = fake_build
+    try:
+        result = await pipe.handle("https://s.shopee.com.br/XXX")
+    finally:
+        module.build_shopee_auto_post = original
+
+    assert result == 1
+    assert poster.posts == ["POST YA ARMADO"]
+
+
+async def test_pipeline_sin_credenciales_cae_al_reenvio():
+    poster = FakePoster()
+    pipe = ShopeeReviewPipeline(poster, dedup=FakeDedup())  # sin app_id/secret
+
+    text = "veja https://s.shopee.com.br/XXX"
+    result = await pipe.handle(text)
+
+    # sin credenciales, el reenvio marcado de siempre (no auto_post)
+    assert result == 1
+    assert "SHOPEE" in poster.posts[0]
