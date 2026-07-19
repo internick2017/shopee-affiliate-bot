@@ -5,6 +5,7 @@ from src.shopee_resolver import (
     ShopeeOffer,
     extract_shopee_shortlinks,
     resolve_shopee_offer,
+    retag_shopee_url,
 )
 
 APP_ID = "test_app_id"
@@ -77,6 +78,11 @@ _ERROR_INVALID_URL = {
             "extensions": {"code": 11001, "message": "Params Error : invalid origin url"},
         }
     ]
+}
+
+# Respuesta REAL de generateShortLink (2026-07-18).
+_GENERATE_SHORT_LINK_OK = {
+    "data": {"generateShortLink": {"shortLink": "https://s.shopee.com.br/qi0pdhPjt"}}
 }
 
 
@@ -221,3 +227,27 @@ def test_resolve_offer_product_offer_null():
     )
 
     assert offer is None
+
+
+def test_retag_shopee_url_exito():
+    link = retag_shopee_url(
+        "https://shopee.com.br/m/sabadovip",
+        APP_ID,
+        SECRET,
+        ["lannybot"],
+        http_post=_fake_post(_GENERATE_SHORT_LINK_OK),
+    )
+
+    assert link == "https://s.shopee.com.br/qi0pdhPjt"
+
+
+def test_retag_shopee_url_error():
+    link = retag_shopee_url(
+        "https://shopee.com.br/m/sabadovip",
+        APP_ID,
+        SECRET,
+        [],
+        http_post=_fake_post(_ERROR_INVALID_URL),
+    )
+
+    assert link is None

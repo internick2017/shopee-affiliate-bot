@@ -243,3 +243,28 @@ def resolve_shopee_offer(
         link_propio=link_propio,
         precio_previo=_precio_previo_derivado(precio, pct),
     )
+
+
+def retag_shopee_url(
+    url: str,
+    app_id: str,
+    secret: str,
+    subids: list[str],
+    *,
+    http_post: Callable[..., object] = _default_post,
+) -> str | None:
+    """Re-tagea CUALQUIER URL de Shopee a la cuenta de Nick (no solo productos —
+    verificado en vivo con un link de campaña VIP, funciona igual). None ante
+    cualquier fallo. Nunca lanza."""
+    sub_ids_json = json.dumps(subids)
+    query = f"""
+    mutation {{
+      generateShortLink(input: {{originUrl: "{url}", subIds: {sub_ids_json}}}) {{
+        shortLink
+      }}
+    }}
+    """
+    data = _graphql_call(app_id, secret, query, http_post=http_post)
+    if not data:
+        return None
+    return data.get("generateShortLink", {}).get("shortLink")
