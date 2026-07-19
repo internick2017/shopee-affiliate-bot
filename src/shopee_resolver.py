@@ -99,6 +99,9 @@ def _graphql_call(
         if response.status_code != 200:
             return None
         body = response.json()
+        if not isinstance(body, dict):
+            logger.warning("La API de Shopee devolvió un JSON que no es un diccionario: %s", type(body))
+            return None
     except Exception as exc:  # noqa: BLE001 - degradación segura, se loguea
         logger.warning("Fallo llamando a la API de Shopee: %s", exc)
         return None
@@ -106,13 +109,6 @@ def _graphql_call(
         logger.info("La API de Shopee devolvió error: %s", body["errors"])
         return None
     return body.get("data")
-
-
-def has_shopee_shortlinks(text: str | None) -> bool:
-    """True si el texto contiene al menos un link de Shopee."""
-    if not text:
-        return False
-    return bool(_SHORTLINK_RE.search(text))
 
 
 def extract_shopee_shortlinks(text: str | None) -> list[str]:
@@ -228,7 +224,7 @@ def resolve_shopee_offer(
     if not data:
         return None
 
-    nodes = data.get("productOfferV2", {}).get("nodes") or []
+    nodes = (data.get("productOfferV2") or {}).get("nodes") or []
     if not nodes:
         return None
     nodo = nodes[0]

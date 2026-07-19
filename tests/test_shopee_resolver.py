@@ -203,3 +203,21 @@ def test_resolve_offer_sin_descuento_no_es_oferta():
 
     assert offer is not None
     assert offer.tiene_descuento is False
+
+
+def test_resolve_offer_product_offer_null():
+    # Regresión: GraphQL devuelve {"data": {"productOfferV2": null}} (null en vez
+    # de ausente). Sin la guarda, data.get("productOfferV2", {}).get("nodes") falla
+    # porque None.get() lanza AttributeError. Con la guarda (data.get(...) or {}),
+    # degradamos seguramente a None.
+    body = {"data": {"productOfferV2": None}}
+    url_resuelta = "https://shopee.com.br/Kit-i.860748832.23498094336"
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/XXX",
+        APP_ID,
+        SECRET,
+        http_get=_fake_get(url_resuelta),
+        http_post=_fake_post(body),
+    )
+
+    assert offer is None
