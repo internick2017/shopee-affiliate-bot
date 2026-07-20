@@ -1,4 +1,6 @@
 import asyncio
+import json
+from decimal import Decimal
 
 from src.shopee_review import (
     DEFAULT_MARKER,
@@ -173,6 +175,7 @@ _PRODUCT_OFFER_BODY = {
                     "productName": "Kit 10 Panos De Limpeza Microfibra",
                     "price": "16.88",
                     "priceDiscountRate": 83,
+                    "commissionRate": "0.12",
                     "offerLink": "https://s.shopee.com.br/9pcpWfgiuH",
                 }
             ]
@@ -359,3 +362,67 @@ async def test_pipeline_sin_credenciales_cae_al_reenvio():
     # sin credenciales, el reenvio marcado de siempre (no auto_post)
     assert result == 1
     assert "SHOPEE" in poster.posts[0]
+
+
+# --- filtro por umbral de comision (Task 2) ---
+
+
+def test_auto_post_bajo_umbral_de_comision_se_descarta():
+    # mismo fixture de producto que ya usan los otros tests de este archivo, pero con
+    # comision baja (3%, por debajo del umbral por defecto de 6%)
+    body = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body["data"]["productOfferV2"]["nodes"][0]["commissionRate"] = "0.03"
+
+    texto = "Ar Condicionado\nhttps://s.shopee.com.br/PRODUTO"
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {"https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336"}
+        ),
+        http_post=_fake_post_por_query([body]),
+    )
+
+    assert msg is None
+
+
+def test_auto_post_en_o_sobre_el_umbral_publica():
+    body = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body["data"]["productOfferV2"]["nodes"][0]["commissionRate"] = "0.06"  # exacto en el umbral
+
+    texto = "Kit de panos\nhttps://s.shopee.com.br/PRODUTO"
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {"https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336"}
+        ),
+        http_post=_fake_post_por_query([body]),
+    )
+
+    assert msg is not None
+
+
+def test_auto_post_umbral_personalizado_se_respeta():
+    # comision 8%, pero con umbral custom de 10% deberia descartarse igual
+    body = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body["data"]["productOfferV2"]["nodes"][0]["commissionRate"] = "0.08"
+
+    texto = "Producto\nhttps://s.shopee.com.br/PRODUTO"
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {"https://s.shopee.com.br/PRODUTO": "https://shopee.com.br/x-i.860748832.23498094336"}
+        ),
+        http_post=_fake_post_por_query([body]),
+        umbral_comision=Decimal("10"),
+    )
+
+    assert msg is None

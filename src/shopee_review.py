@@ -9,6 +9,7 @@ tomadas en docs/superpowers/specs/2026-07-18-shopee-post-propio-design.md.
 import asyncio
 import logging
 from collections.abc import Callable
+from decimal import Decimal
 
 from .links import SHOPEE_LINK_RE
 from .models import Product
@@ -76,15 +77,16 @@ def build_shopee_auto_post(
     secret: str,
     *,
     hook: str | None = None,
+    umbral_comision: Decimal = Decimal("6"),
     http_get: Callable[..., object] | None = None,
     http_post: Callable[..., object] | None = None,
 ) -> str | None:
     """Arma el post YA MONETIZADO de Shopee con datos reales de la Affiliate Open API.
 
     Sin `hook`, o si el mensaje no tiene exactamente un shortlink que resuelva a un
-    producto con descuento comprobable, devuelve None — el caller cae al reenvío
-    marcado. Nunca hay un "camino viejo": esta función es enteramente nueva, Shopee
-    nunca tuvo auto-post antes de esto.
+    producto con descuento comprobable Y comisión >= `umbral_comision`, devuelve
+    None — el caller cae al reenvío marcado. Nunca hay un "camino viejo": esta
+    función es enteramente nueva, Shopee nunca tuvo auto-post antes de esto.
     """
     if hook is None or not text:
         return None
@@ -104,7 +106,7 @@ def build_shopee_auto_post(
 
     for link in enlaces:
         offer = resolve_shopee_offer(link, app_id, secret, **resolve_kwargs)
-        if offer and offer.tiene_descuento:
+        if offer and offer.tiene_descuento and offer.comision_pct >= umbral_comision:
             ofertas_resueltas.append(offer)
         elif offer is None:
             # o no tiene forma de producto, o productOfferV2 no tuvo datos. En
@@ -150,6 +152,7 @@ class ShopeeReviewPipeline(ReviewPipeline):
         app_id: str | None = None,
         secret: str | None = None,
         hooks=None,
+        umbral_comision: Decimal = Decimal("6"),
     ):
         super().__init__(
             poster,
@@ -162,6 +165,7 @@ class ShopeeReviewPipeline(ReviewPipeline):
         self._app_id = app_id
         self._secret = secret
         self._hooks = hooks
+        self._umbral_comision = umbral_comision
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
         if self._app_id and self._secret and has_shopee_links(text):
@@ -171,6 +175,7 @@ class ShopeeReviewPipeline(ReviewPipeline):
                 self._app_id,
                 self._secret,
                 hook=self._hooks.next() if self._hooks else None,
+                umbral_comision=self._umbral_comision,
             )
             if auto_msg:
                 key = self.dedup_key(text)

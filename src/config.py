@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 
 from dotenv import load_dotenv
 
@@ -45,4 +46,5 @@ def load_config() -> dict:
         "amazon_tag": os.getenv("AMAZON_TAG"),
         "ml_matt_word": os.getenv("ML_MATT_WORD"),
         "ml_matt_tool": os.getenv("ML_MATT_TOOL"),
+        "shopee_min_commission_pct": Decimal(os.getenv("SHOPEE_MIN_COMMISSION_PCT", "6")),
     }

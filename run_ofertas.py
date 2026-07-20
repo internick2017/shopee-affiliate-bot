@@ -168,6 +168,7 @@ async def main() -> None:
         app_id=cfg["shopee_app_id"],
         secret=cfg["shopee_secret"],
         hooks=hookbank,
+        umbral_comision=cfg["shopee_min_commission_pct"],
     )
     ml_review = MercadoLivreReviewPipeline(
         ml_poster,
