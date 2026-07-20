@@ -125,13 +125,19 @@ def build_shopee_auto_post(
                 ofertas_resueltas.append(offer)
             else:
                 ofertas_bajo_umbral.append(offer)
-        elif offer is None:
-            # o no tiene forma de producto, o productOfferV2 no tuvo datos. En
-            # cualquier caso, no cuenta como producto Y no se sabe si es "extra"
-            # sin re-resolver la URL — se hace una vez más, liviano (ya se pagó
-            # el costo del redirect adentro de resolve_shopee_offer, pero acá
-            # hace falta la URL resuelta para clasificar, así que se repite el
-            # get). Ver Task 3 nota de diseño.
+        else:
+            # o no tiene forma de producto, o productOfferV2 no tuvo datos, o sí
+            # resolvió pero sin descuento activo (priceDiscountRate 0) — en
+            # cualquier caso, no cuenta como producto confirmado Y no se sabe si
+            # es "extra" sin re-resolver la URL — se hace una vez más, liviano
+            # (ya se pagó el costo del redirect adentro de resolve_shopee_offer,
+            # pero acá hace falta la URL resuelta para clasificar, así que se
+            # repite el get). Ver Task 3 nota de diseño. IMPORTANTE: esta rama
+            # tiene que capturar TODO lo que no entró en ofertas_resueltas ni en
+            # ofertas_bajo_umbral, para que el chequeo de "un único link en el
+            # mensaje" de la línea de abajo (DESCARTADO_POR_COMISION) sea
+            # confiable — un link "perdido" ahí rompería esa cuenta (bug real
+            # encontrado en review, 2026-07-19).
             no_producto.append(link)
 
     if len(ofertas_resueltas) != 1:

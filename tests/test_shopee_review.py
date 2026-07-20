@@ -451,3 +451,39 @@ async def test_pipeline_no_reenvia_oferta_descartada_por_comision():
     # se descarta del todo: ni auto-post ni reenvio marcado
     assert result == 0
     assert poster.posts == []
+
+
+def test_auto_post_dos_links_uno_sin_descuento_no_dispara_descarte():
+    # link A resuelve a un producto real pero SIN descuento activo (0%) -- antes
+    # del fix quedaba invisible para las 3 listas de clasificacion, lo que podia
+    # gatillar el sentinel DESCARTADO_POR_COMISION por error en un mensaje que en
+    # realidad tiene 2 links (ambiguo), no 1. Ver nota en el codigo.
+    body_sin_descuento = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body_sin_descuento["data"]["productOfferV2"]["nodes"][0]["priceDiscountRate"] = 0
+
+    # link B resuelve a un producto real, con descuento, pero comision baja (3%)
+    body_bajo_umbral = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body_bajo_umbral["data"]["productOfferV2"]["nodes"][0]["commissionRate"] = "0.03"
+
+    texto = (
+        "Produto A\nhttps://s.shopee.com.br/PRODUTO_A\n"
+        "Produto B\nhttps://s.shopee.com.br/PRODUTO_B"
+    )
+    msg = build_shopee_auto_post(
+        texto,
+        APP_ID,
+        SECRET,
+        hook="🔥 OFERTA!",
+        http_get=_fake_get_por_link(
+            {
+                "https://s.shopee.com.br/PRODUTO_A": "https://shopee.com.br/x-i.860748832.23498094336",
+                "https://s.shopee.com.br/PRODUTO_B": "https://shopee.com.br/y-i.111111111.22222222222",
+            }
+        ),
+        http_post=_fake_post_por_query([body_sin_descuento, body_bajo_umbral]),
+    )
+
+    # NO debe ser el sentinel de descarte -- es un mensaje ambiguo de 2 links,
+    # tiene que caer al reenvio marcado de siempre (None), no descartarse del todo.
+    assert msg is None
+    assert msg is not DESCARTADO_POR_COMISION
