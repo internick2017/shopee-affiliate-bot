@@ -191,6 +191,7 @@ class ShopeeOffer:
     titulo: str
     precio: Decimal
     descuento_pct: int
+    comision_pct: Decimal
     link_propio: str
     precio_previo: Decimal | None = None
 
@@ -224,7 +225,7 @@ def resolve_shopee_offer(
     query = f"""
     query {{
       productOfferV2(itemId: {item_id}, shopId: {shop_id}, limit: 1) {{
-        nodes {{ productName price priceDiscountRate offerLink }}
+        nodes {{ productName price priceDiscountRate offerLink commissionRate }}
       }}
     }}
     """
@@ -244,10 +245,13 @@ def resolve_shopee_offer(
         return None
 
     pct = nodo.get("priceDiscountRate") or 0
+    comision_raw = _a_decimal(nodo.get("commissionRate"))
+    comision_pct = (comision_raw * 100) if comision_raw is not None else Decimal("0")
     return ShopeeOffer(
         titulo=titulo,
         precio=precio,
         descuento_pct=pct,
+        comision_pct=comision_pct,
         link_propio=link_propio,
         precio_previo=_precio_previo_derivado(precio, pct),
     )

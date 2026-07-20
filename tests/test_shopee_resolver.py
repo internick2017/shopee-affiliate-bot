@@ -267,3 +267,34 @@ def test_retag_shopee_url_generate_short_link_null():
     )
 
     assert link is None
+
+
+def test_resolve_offer_incluye_comision():
+    url_resuelta = "https://shopee.com.br/Kit-10-Panos-i.860748832.23498094336"
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/XXX",
+        APP_ID,
+        SECRET,
+        http_get=_fake_get(url_resuelta),
+        http_post=_fake_post(_PRODUCT_OFFER_BODY),
+    )
+
+    assert offer is not None
+    # "commissionRate":"0.12" en el fixture -> 12% (Decimal entero, no fraccion)
+    assert offer.comision_pct == Decimal("12")
+
+
+def test_resolve_offer_sin_commission_rate_da_cero():
+    body = json.loads(json.dumps(_PRODUCT_OFFER_BODY))  # copia
+    del body["data"]["productOfferV2"]["nodes"][0]["commissionRate"]
+    url_resuelta = "https://shopee.com.br/Kit-10-Panos-i.860748832.23498094336"
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/XXX",
+        APP_ID,
+        SECRET,
+        http_get=_fake_get(url_resuelta),
+        http_post=_fake_post(body),
+    )
+
+    assert offer is not None
+    assert offer.comision_pct == Decimal("0")
