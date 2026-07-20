@@ -405,7 +405,7 @@ def test_auto_post_en_o_sobre_el_umbral_publica():
         http_post=_fake_post_por_query([body]),
     )
 
-    assert msg is not None
+    assert isinstance(msg, str)
 
 
 def test_auto_post_umbral_personalizado_se_respeta():

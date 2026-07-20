@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import src.config as config
 
 
@@ -104,3 +106,36 @@ def test_ml_matt_word_and_tool_absent_are_none(monkeypatch):
 
     assert cfg["ml_matt_word"] is None
     assert cfg["ml_matt_tool"] is None
+
+
+def test_shopee_min_commission_pct_default(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("SHOPEE_MIN_COMMISSION_PCT", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["shopee_min_commission_pct"] == Decimal("6")
+
+
+def test_shopee_min_commission_pct_custom_value(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("SHOPEE_MIN_COMMISSION_PCT", "10")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["shopee_min_commission_pct"] == Decimal("10")
+
+
+def test_shopee_min_commission_pct_malformed_falls_back_to_default(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("SHOPEE_MIN_COMMISSION_PCT", "")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["shopee_min_commission_pct"] == Decimal("6")

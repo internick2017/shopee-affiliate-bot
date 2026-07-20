@@ -1,5 +1,5 @@
 import os
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from dotenv import load_dotenv
 
@@ -17,6 +17,17 @@ def _maybe_int(raw):
         except ValueError:
             return raw
     return raw
+
+
+def _maybe_decimal(raw, default: str) -> Decimal:
+    """Decimal(raw) si es un número válido; si no (ausente, vacío o malformado),
+    Decimal(default)."""
+    if raw:
+        try:
+            return Decimal(raw)
+        except InvalidOperation:
+            pass
+    return Decimal(default)
 
 
 def load_config() -> dict:
@@ -46,5 +57,5 @@ def load_config() -> dict:
         "amazon_tag": os.getenv("AMAZON_TAG"),
         "ml_matt_word": os.getenv("ML_MATT_WORD"),
         "ml_matt_tool": os.getenv("ML_MATT_TOOL"),
-        "shopee_min_commission_pct": Decimal(os.getenv("SHOPEE_MIN_COMMISSION_PCT", "6")),
+        "shopee_min_commission_pct": _maybe_decimal(os.getenv("SHOPEE_MIN_COMMISSION_PCT"), "6"),
     }
