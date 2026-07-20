@@ -32,6 +32,15 @@ PLATFORM = "shopee"
 DEFAULT_MARKER = "⚠️ SHOPEE: gerar link de afiliado e postar manual"
 
 
+class _Descartado:
+    """Sentinel: la oferta se descartó a propósito (comisión insuficiente) — el
+    caller NO debe caer al reenvío marcado, a diferencia de un `None` normal
+    (que sí cae, por ambigüedad o por no poder resolver el link)."""
+
+
+DESCARTADO_POR_COMISION = _Descartado()
+
+
 def has_shopee_links(text: str | None) -> bool:
     """True si el texto contiene al menos un link de Shopee."""
     return has_links(text, _SHOPEE_RE)
@@ -80,13 +89,17 @@ def build_shopee_auto_post(
     umbral_comision: Decimal = Decimal("6"),
     http_get: Callable[..., object] | None = None,
     http_post: Callable[..., object] | None = None,
-) -> str | None:
+) -> str | _Descartado | None:
     """Arma el post YA MONETIZADO de Shopee con datos reales de la Affiliate Open API.
 
     Sin `hook`, o si el mensaje no tiene exactamente un shortlink que resuelva a un
-    producto con descuento comprobable Y comisión >= `umbral_comision`, devuelve
-    None — el caller cae al reenvío marcado. Nunca hay un "camino viejo": esta
-    función es enteramente nueva, Shopee nunca tuvo auto-post antes de esto.
+    producto con descuento comprobable, devuelve None — el caller cae al reenvío
+    marcado. Si el ÚNICO link del mensaje resuelve a un producto con descuento real
+    pero comisión por debajo de `umbral_comision`, devuelve el sentinel
+    DESCARTADO_POR_COMISION en cambio — el caller NO debe caer al reenvío marcado en
+    ese caso (decisión explícita: si no es del rubro, no se muestra ni una vez).
+    Nunca hay un "camino viejo": esta función es enteramente nueva, Shopee nunca tuvo
+    auto-post antes de esto.
     """
     if hook is None or not text:
         return None
@@ -102,12 +115,16 @@ def build_shopee_auto_post(
         return None
 
     ofertas_resueltas: list[ShopeeOffer] = []
+    ofertas_bajo_umbral: list[ShopeeOffer] = []
     no_producto: list[str] = []
 
     for link in enlaces:
         offer = resolve_shopee_offer(link, app_id, secret, **resolve_kwargs)
-        if offer and offer.tiene_descuento and offer.comision_pct >= umbral_comision:
-            ofertas_resueltas.append(offer)
+        if offer and offer.tiene_descuento:
+            if offer.comision_pct >= umbral_comision:
+                ofertas_resueltas.append(offer)
+            else:
+                ofertas_bajo_umbral.append(offer)
         elif offer is None:
             # o no tiene forma de producto, o productOfferV2 no tuvo datos. En
             # cualquier caso, no cuenta como producto Y no se sabe si es "extra"
@@ -118,6 +135,13 @@ def build_shopee_auto_post(
             no_producto.append(link)
 
     if len(ofertas_resueltas) != 1:
+        # caso simple y sin ambigüedad: un único link, resolvió a un producto con
+        # descuento real, y la única razón por la que no cuenta es la comisión baja
+        # -> descarte a propósito, no ambigüedad. Cualquier otra combinación (cero
+        # ofertas, más de una, o hay links no-producto de por medio) sigue cayendo
+        # al reenvío marcado de siempre, igual que antes de este feature.
+        if not ofertas_resueltas and len(ofertas_bajo_umbral) == 1 and not no_producto:
+            return DESCARTADO_POR_COMISION
         return None
     offer = ofertas_resueltas[0]
 
@@ -177,6 +201,12 @@ class ShopeeReviewPipeline(ReviewPipeline):
                 hook=self._hooks.next() if self._hooks else None,
                 umbral_comision=self._umbral_comision,
             )
+            if auto_msg is DESCARTADO_POR_COMISION:
+                logger.info(
+                    "Oferta de Shopee descartada por comisión baja (< %s%%)",
+                    self._umbral_comision,
+                )
+                return 0
             if auto_msg:
                 key = self.dedup_key(text)
                 if key and self._dedup and not self._dedup.claim(key):

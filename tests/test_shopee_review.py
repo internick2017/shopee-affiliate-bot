@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from src.shopee_review import (
     DEFAULT_MARKER,
+    DESCARTADO_POR_COMISION,
     ShopeeReviewPipeline,
     build_shopee_auto_post,
     build_shopee_review_message,
@@ -385,7 +386,7 @@ def test_auto_post_bajo_umbral_de_comision_se_descarta():
         http_post=_fake_post_por_query([body]),
     )
 
-    assert msg is None
+    assert msg is DESCARTADO_POR_COMISION
 
 
 def test_auto_post_en_o_sobre_el_umbral_publica():
@@ -425,4 +426,28 @@ def test_auto_post_umbral_personalizado_se_respeta():
         umbral_comision=Decimal("10"),
     )
 
-    assert msg is None
+    assert msg is DESCARTADO_POR_COMISION
+
+
+async def test_pipeline_no_reenvia_oferta_descartada_por_comision():
+    poster = FakePoster()
+    pipe = ShopeeReviewPipeline(
+        poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET
+    )
+
+    import src.shopee_review as module
+
+    original = module.build_shopee_auto_post
+
+    def fake_build(text, app_id, secret, **kwargs):
+        return DESCARTADO_POR_COMISION
+
+    module.build_shopee_auto_post = fake_build
+    try:
+        result = await pipe.handle("https://s.shopee.com.br/XXX")
+    finally:
+        module.build_shopee_auto_post = original
+
+    # se descarta del todo: ni auto-post ni reenvio marcado
+    assert result == 0
+    assert poster.posts == []
