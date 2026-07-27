@@ -79,6 +79,23 @@ def test_single_platform_message_survives_whole():
     assert "s.shopee.com.br/8V77TB32CU" in msg
 
 
+def test_footer_of_giro_de_ofertas_is_stripped():
+    """GIRO DE OFERTAS firma cada oferta con un link a su propio canal de Telegram
+    (t.me/girodeofertas); sin este marcador, el reenvío manual de Shopee terminaría
+    promocionando el canal competidor."""
+    text = (
+        "Bombom Ferrero Rocher Com 8 Unidades\n"
+        "💰 Por R$23\n"
+        "https://s.shopee.com.br/6fg0pPNtiC\n\n"
+        "🛍 Todas as ofertas reunidas aqui:\n"
+        "https://t.me/girodeofertas"
+    )
+    msg = build_review_message(text, SHOPEE_LINK_RE, "[SH]", platform="shopee")
+    assert "Bombom Ferrero Rocher" in msg
+    assert "Todas as ofertas reunidas aqui" not in msg
+    assert "girodeofertas" not in msg
+
+
 def test_block_without_links_is_kept_as_context():
     text = "⚡ OFERTAS DA SEMANA ⚡\n\nFone\nhttps://meli.la/AAA"
     msg = build_review_message(text, MERCADOLIVRE_LINK_RE, "[ML]", platform="ml")
