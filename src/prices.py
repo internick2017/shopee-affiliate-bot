@@ -6,14 +6,10 @@ _PRICE_PHRASES = r"à vista|no pix|via pix|em até|parcelado|em \d+x"
 
 # --- Extracción de VALOR (busca en todo el texto) ---
 # Descuento con R$: "De R$ 408 por R$ 167"
-_DISCOUNT_RS_RE = re.compile(
-    r"de\s*r\$\s*([\d.,]+)\s*por\s*r\$\s*([\d.,]+)", re.IGNORECASE
-)
+_DISCOUNT_RS_RE = re.compile(r"de\s*r\$\s*([\d.,]+)\s*por\s*r\$\s*([\d.,]+)", re.IGNORECASE)
 # Descuento sin R$ (IAchados): "DE 13,59 | POR 9,16" (pipe opcional).
 # \bde\b / \bpor\b evitan matchear "de"/"por" dentro de palabras (ej. "grande").
-_DISCOUNT_NORS_RE = re.compile(
-    r"\bde\b\s*([\d.,]+)\s*\|?\s*\bpor\b\s*([\d.,]+)", re.IGNORECASE
-)
+_DISCOUNT_NORS_RE = re.compile(r"\bde\b\s*([\d.,]+)\s*\|?\s*\bpor\b\s*([\d.,]+)", re.IGNORECASE)
 # Precio único con R$: "R$ 19"
 _PRICE_RS_RE = re.compile(r"r\$\s*([\d.,]+)", re.IGNORECASE)
 # Precio único sin R$ seguido de frase: "69,99 à vista"
@@ -21,9 +17,7 @@ _PRICE_PLAIN_RE = re.compile(r"\b(\d[\d.,]*)\s*(?:" + _PRICE_PHRASES + r")", re.
 
 # --- Clasificación de LÍNEA (para anclar nombres) ---
 _PRICE_RS_LINE_RE = re.compile(r"r\$\s*\d", re.IGNORECASE)
-_PRICE_PLAIN_LINE_RE = re.compile(
-    r"^\d[\d.,]*\s*(?:" + _PRICE_PHRASES + r")", re.IGNORECASE
-)
+_PRICE_PLAIN_LINE_RE = re.compile(r"^\d[\d.,]*\s*(?:" + _PRICE_PHRASES + r")", re.IGNORECASE)
 _POR_LINE_RE = re.compile(r"^por\s*[\d]", re.IGNORECASE)
 # "a partir de 28,39 à vista" (Crowman) o "A partir de: R$ 19,99" (Promocasinha):
 # el precio más bajo de un producto con variantes.
@@ -31,9 +25,7 @@ _A_PARTIR_LINE_RE = re.compile(r"^a partir de:?\s*(?:r\$\s*)?\d", re.IGNORECASE)
 _A_PARTIR_RE = re.compile(r"\ba partir de\b", re.IGNORECASE)
 # Cupones: "% OFF", "OFF em R$", montos de descuento tipo "cupom de R$10 OFF", y el
 # tope de un cupón ("Limite de R$ 50") — ninguno es el precio de un producto.
-_COUPON_RE = re.compile(
-    r"%\s*off|off em r\$|r\$\s*\d[\d.,]*\s*off|limite de\s*r\$", re.IGNORECASE
-)
+_COUPON_RE = re.compile(r"%\s*off|off em r\$|r\$\s*\d[\d.,]*\s*off|limite de\s*r\$", re.IGNORECASE)
 _LEADING_SYMBOLS_RE = re.compile(r"^[^0-9A-Za-zÀ-ÿ]+")
 
 
@@ -84,9 +76,9 @@ def is_price_line(line: str) -> bool:
     core = _strip_leading_symbols(line).strip()
     if _PRICE_PLAIN_LINE_RE.match(core):
         return True
-    if _DISCOUNT_NORS_RE.search(core):   # "DE x | POR y" pair
+    if _DISCOUNT_NORS_RE.search(core):  # "DE x | POR y" pair
         return True
-    if _POR_LINE_RE.match(core):         # single "POR y ..." line
+    if _POR_LINE_RE.match(core):  # single "POR y ..." line
         return True
     return bool(_A_PARTIR_LINE_RE.match(core))  # "a partir de 28,39 à vista"
 

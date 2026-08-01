@@ -16,6 +16,7 @@ ello. Estas reglas salen de los 6 mensajes multi-link reales de Crowman e IAchad
 Lo que NO se infiere, a propósito: un link sin precio propio no hereda el precio de
 otra oferta. Publicar un precio equivocado es peor que publicar un post de menos.
 """
+
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -102,8 +103,7 @@ def _offer(name, line, url) -> Offer | None:
     final, original, is_range = extract_price_info(line)
     if final is None or not name or not extract_asin(url):
         return None
-    return Offer(name=name, price_final=final, price_original=original,
-                 is_range=is_range, url=url)
+    return Offer(name=name, price_final=final, price_original=original, is_range=is_range, url=url)
 
 
 def _dedupe_by_asin(offers: list[Offer]) -> list[Offer]:

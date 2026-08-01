@@ -75,11 +75,8 @@ AMAZON_TEXT_OTRO_GRUPO = (
 )
 
 AMAZON_TEXT_OTRO_PRODUCTO = (
-    "🔥 Outro produto\n\n"
-    "💵 R$ 25\n"
-    "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=crowmantech-20\n"
+    "🔥 Outro produto\n\n💵 R$ 25\nhttps://www.amazon.com.br/dp/B0F8BQ3KYW?tag=crowmantech-20\n"
 )
-
 
 
 async def test_same_asin_from_another_group_is_not_reposted():
@@ -178,7 +175,9 @@ def _fake_expand(resuelto):
 async def test_resolves_shortlink_and_posts():
     poster = _FakePoster()
     pipeline = AmazonPipeline(
-        TAG, poster, HookBank([HOOK]),
+        TAG,
+        poster,
+        HookBank([HOOK]),
         expand=_fake_expand("https://www.amazon.com.br/dp/B076X7T368"),
     )
 
@@ -193,9 +192,7 @@ async def test_resolves_shortlink_and_posts():
 async def test_unresolvable_shortlink_is_dropped():
     """Si el shortlink no resuelve, el texto queda igual y no hay link de Amazon."""
     poster = _FakePoster()
-    pipeline = AmazonPipeline(
-        TAG, poster, HookBank([HOOK]), expand=lambda text, **kw: text
-    )
+    pipeline = AmazonPipeline(TAG, poster, HookBank([HOOK]), expand=lambda text, **kw: text)
 
     assert await pipeline.handle(PROMOCASINHA_TEXT, "Promocasinha") == 0
     assert poster.posts == []
@@ -206,7 +203,10 @@ async def test_shortlink_dedups_by_resolved_asin():
     poster = _FakePoster()
     dedup = FakeDedup()
     pipeline = AmazonPipeline(
-        TAG, poster, HookBank([HOOK]), dedup=dedup,
+        TAG,
+        poster,
+        HookBank([HOOK]),
+        dedup=dedup,
         expand=_fake_expand("https://www.amazon.com.br/dp/B076X7T368"),
     )
 
@@ -223,6 +223,7 @@ async def test_shortlink_dedups_by_resolved_asin():
 
 async def test_no_network_when_no_shortlink():
     """Un mensaje sin shortlink no debe tocar la red."""
+
     def _boom(text, **kw):
         raise AssertionError("no debería resolverse nada")
 
@@ -233,6 +234,7 @@ async def test_no_network_when_no_shortlink():
 
 
 # --- foto del mensaje original ---
+
 
 class _FakePhotoPoster(_FakePoster):
     def __init__(self):
@@ -267,6 +269,7 @@ async def test_post_without_photo_still_text_only():
 
 async def test_key_is_released_when_posting_fails():
     """Un post fallido no debe dar la oferta por publicada: se reintenta después."""
+
     class _BrokenPoster:
         def __init__(self):
             self.posts = []

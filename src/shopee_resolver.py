@@ -14,6 +14,7 @@ caso normal (verificado en vivo: el `offerLink` de `productOfferV2` lleva el mis
 producto (cupón/campaña VIP): son links de Shopee como cualquier otro, y la API
 los re-tagea igual, sin importar que no sean un producto individual.
 """
+
 import hashlib
 import json
 import logging
@@ -93,9 +94,7 @@ def _graphql_call(
     `variables` va tal cual en el payload de GraphQL (vacío si no se pasa), para
     los callers que declaran variables en su query en vez de interpolar valores
     directo en el texto — ver `retag_shopee_url`."""
-    payload = json.dumps(
-        {"query": query, "variables": variables or {}}, separators=(",", ":")
-    )
+    payload = json.dumps({"query": query, "variables": variables or {}}, separators=(",", ":"))
     ts, sig = _firmar(app_id, secret, payload)
     headers = {
         "Content-Type": "application/json",
@@ -108,7 +107,9 @@ def _graphql_call(
         json_method = getattr(response, "json", None)
         body = json_method() if callable(json_method) else None
         if not isinstance(body, dict):
-            logger.warning("La API de Shopee devolvió un JSON que no es un diccionario: %s", type(body))
+            logger.warning(
+                "La API de Shopee devolvió un JSON que no es un diccionario: %s", type(body)
+            )
             return None
     except Exception as exc:  # noqa: BLE001 - degradación segura, se loguea
         logger.warning("Fallo llamando a la API de Shopee: %s", exc)

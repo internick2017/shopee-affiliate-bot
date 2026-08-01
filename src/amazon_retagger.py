@@ -77,9 +77,7 @@ def build_amazon_post(text: str | None, tag: str) -> str | None:
 
     lines = result.split("\n")
     filtered_lines = [
-        line
-        for line in lines
-        if not any(marker in line.lower() for marker in FOOTER_MARKERS)
+        line for line in lines if not any(marker in line.lower() for marker in FOOTER_MARKERS)
     ]
     result = "\n".join(filtered_lines)
 

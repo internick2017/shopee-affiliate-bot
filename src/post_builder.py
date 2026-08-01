@@ -27,9 +27,7 @@ def build_price_block(product: Product) -> str:
     return f"✅ Por: {format_brl(product.price_final)} 😱🛒"
 
 
-def build_post(
-    product: Product, hook: str, extra_lines: tuple[str, ...] = ()
-) -> str:
+def build_post(product: Product, hook: str, extra_lines: tuple[str, ...] = ()) -> str:
     """Arma el texto final del post con el estilo de Lanny.
 
     `extra_lines` cuelga del bloque de precio y existe para Mercado Livre, que suma la

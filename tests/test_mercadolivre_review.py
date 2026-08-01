@@ -62,12 +62,7 @@ def test_build_message_marks_and_keeps_name_price_and_coupon():
 
 
 def test_build_message_strips_competitor_footer():
-    text = (
-        "Produto X\n"
-        "https://meli.la/abc\n"
-        "🛍 Grupos de promos:\n"
-        "https://ctlinks.com.br"
-    )
+    text = "Produto X\nhttps://meli.la/abc\n🛍 Grupos de promos:\nhttps://ctlinks.com.br"
     msg = build_mercadolivre_review_message(text)
     assert "ctlinks.com.br" not in msg
     assert "Grupos de promos" not in msg
@@ -142,7 +137,7 @@ def test_forward_carries_source_photo():
 # Mismo body real usado en tests/test_mercadolivre_resolver.py (Smart TV Hisense,
 # item_id MLB54629493) — PROMOCASINHA_ML de arriba trae justo ese meli.la/1Q8EMBW.
 _PRODUCT_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Smart Tv Hisense De 65 Polegadas Vidaa 65u6qv Uled 4k"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
     '"path":"/affiliates/profile","type":"view","should_ignore_stream":false,'
@@ -152,10 +147,10 @@ _PRODUCT_BODY = (
 )
 
 _LIST_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Minhas listas de recomendações"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"page_type":"lists"}'
-    '</script></body></html>'
+    "</script></body></html>"
 )
 
 
@@ -182,8 +177,7 @@ def test_auto_post_replaces_link_and_has_no_marker():
     assert not msg.startswith(DEFAULT_MARKER)
     assert "⚠️" not in msg
     assert (
-        "https://www.mercadolivre.com.br/p/MLB54629493"
-        "?matt_word=lannybot&matt_tool=56889681"
+        "https://www.mercadolivre.com.br/p/MLB54629493?matt_word=lannybot&matt_tool=56889681"
     ) in msg
     assert "https://meli.la/1Q8EMBW" not in msg
     # el resto del contenido sigue ahí
@@ -201,7 +195,9 @@ def test_auto_post_none_when_resolution_fails():
 def test_auto_post_none_without_ml_links():
     assert (
         build_mercadolivre_auto_post(
-            "sem mercado livre aqui", "lannybot", "56889681",
+            "sem mercado livre aqui",
+            "lannybot",
+            "56889681",
             http_get=_fake_ml_get(_PRODUCT_BODY),
         )
         is None
@@ -209,12 +205,7 @@ def test_auto_post_none_without_ml_links():
 
 
 def test_auto_post_strips_competitor_footer():
-    text = (
-        "Produto X\n"
-        "https://meli.la/1Q8EMBW\n"
-        "🛍 Grupos de promos:\n"
-        "https://ctlinks.com.br"
-    )
+    text = "Produto X\nhttps://meli.la/1Q8EMBW\n🛍 Grupos de promos:\nhttps://ctlinks.com.br"
     msg = build_mercadolivre_auto_post(
         text, "lannybot", "56889681", http_get=_fake_ml_get(_PRODUCT_BODY)
     )
@@ -225,9 +216,7 @@ def test_auto_post_strips_competitor_footer():
 
 def test_pipeline_auto_posts_when_configured_and_resolvable():
     poster = FakePoster()
-    pipe = MercadoLivreReviewPipeline(
-        poster, matt_word="lannybot", matt_tool="56889681"
-    )
+    pipe = MercadoLivreReviewPipeline(poster, matt_word="lannybot", matt_tool="56889681")
 
     import src.mercadolivre_review as module
 
@@ -288,9 +277,7 @@ def test_pipeline_auto_path_skips_duplicate():
 
 def test_pipeline_falls_back_to_manual_when_not_resolvable():
     poster = FakePoster()
-    pipe = MercadoLivreReviewPipeline(
-        poster, matt_word="lannybot", matt_tool="56889681"
-    )
+    pipe = MercadoLivreReviewPipeline(poster, matt_word="lannybot", matt_tool="56889681")
 
     import src.mercadolivre_review as module
 
@@ -324,9 +311,7 @@ def test_pipeline_skips_auto_thread_without_ml_shortlinks():
     AmazonPipeline._expanded con has_amazon_shortlinks): build_mercadolivre_auto_post
     no debería llamarse."""
     poster = FakePoster()
-    pipe = MercadoLivreReviewPipeline(
-        poster, matt_word="lannybot", matt_tool="56889681"
-    )
+    pipe = MercadoLivreReviewPipeline(poster, matt_word="lannybot", matt_tool="56889681")
 
     import src.mercadolivre_review as module
 
@@ -433,8 +418,8 @@ _POLYCARD_BODY_REVIEW = (
     '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
     '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
     '"discount_label":{"text":"54% OFF no Pix"}'
-    '}}'
-    ']}]}</script></body></html>'
+    "}}"
+    "]}]}</script></body></html>"
 )
 
 
@@ -448,8 +433,11 @@ def test_auto_post_arma_post_propio_con_datos_de_ml():
     )
 
     msg = build_mercadolivre_auto_post(
-        texto, "lannybot", "56889681",
-        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+        texto,
+        "lannybot",
+        "56889681",
+        hook="GANCHO",
+        http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
     )
 
     assert msg is not None
@@ -479,8 +467,11 @@ def test_auto_post_sin_descuento_no_publica_ni_cae_al_camino_viejo():
     ).replace('"discount_label":{"text":"54% OFF no Pix"}', '"x":1')
 
     msg = build_mercadolivre_auto_post(
-        "oferta\nhttps://meli.la/1VHk77B", "lannybot", "56889681",
-        hook="GANCHO", http_get=_fake_ml_get(body),
+        "oferta\nhttps://meli.la/1VHk77B",
+        "lannybot",
+        "56889681",
+        hook="GANCHO",
+        http_get=_fake_ml_get(body),
     )
 
     assert msg is None
@@ -491,8 +482,11 @@ def test_auto_post_con_hook_y_multiples_links_no_publica():
     texto = "https://meli.la/AAA\nhttps://meli.la/BBB"
 
     msg = build_mercadolivre_auto_post(
-        texto, "lannybot", "56889681",
-        hook="GANCHO", http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
+        texto,
+        "lannybot",
+        "56889681",
+        hook="GANCHO",
+        http_get=_fake_ml_get(_POLYCARD_BODY_REVIEW),
     )
 
     assert msg is None

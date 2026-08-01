@@ -2,6 +2,7 @@
 
 Hasta ahora solo se cubría de rebote, desde los tests de cada plataforma.
 """
+
 import asyncio
 
 import pytest
@@ -128,8 +129,12 @@ def test_dedup_key_ignores_query_params_and_order():
 def test_pipeline_claims_the_key_before_posting():
     poster, dedup = FakePoster(), FakeDedup()
     pipe = ReviewPipeline(
-        poster, link_re=MERCADOLIVRE_LINK_RE, marker="[ML]", prefix="ml",
-        platform="Mercado Livre", dedup=dedup,
+        poster,
+        link_re=MERCADOLIVRE_LINK_RE,
+        marker="[ML]",
+        prefix="ml",
+        platform="Mercado Livre",
+        dedup=dedup,
     )
     text = "Fone\nhttps://meli.la/AAA"
 
@@ -142,8 +147,12 @@ def test_pipeline_releases_the_key_when_posting_fails():
     """Un post fallido no debe dar la oferta por publicada: se reintenta."""
     poster, dedup = FakePoster(fail=True), FakeDedup()
     pipe = ReviewPipeline(
-        poster, link_re=MERCADOLIVRE_LINK_RE, marker="[ML]", prefix="ml",
-        platform="Mercado Livre", dedup=dedup,
+        poster,
+        link_re=MERCADOLIVRE_LINK_RE,
+        marker="[ML]",
+        prefix="ml",
+        platform="Mercado Livre",
+        dedup=dedup,
     )
     text = "Fone\nhttps://meli.la/AAA"
 
@@ -174,6 +183,6 @@ def test_review_message_drops_foreign_block_whole_when_source_signs_it():
     msg = build_review_message(text, SHOPEE_LINK_RE, "MARCA", platform="shopee")
 
     assert msg is not None
-    assert "IAchados" not in msg          # la firma se va
-    assert "Produto Shopee" in msg        # lo nuestro queda
-    assert "Produto Amazon" not in msg    # el bloque ajeno se va ENTERO, sin huérfanos
+    assert "IAchados" not in msg  # la firma se va
+    assert "Produto Shopee" in msg  # lo nuestro queda
+    assert "Produto Amazon" not in msg  # el bloque ajeno se va ENTERO, sin huérfanos

@@ -29,7 +29,7 @@ def test_extract_meli_shortlinks():
 # Body real (recortado) de una página /social/<afiliado>?ref=... resuelta, del tipo
 # "compartir un producto puntual" — bajado durante la investigación del 2026-07-13.
 _PRODUCT_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Smart Tv Hisense De 65 Polegadas Vidaa 65u6qv Uled 4k"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
     '"path":"/affiliates/profile","type":"view","should_ignore_stream":false,'
@@ -41,10 +41,10 @@ _PRODUCT_BODY = (
 # Body real (recortado) de un link que resuelve a una lista/colección, no a un
 # producto puntual — sin melidataSocial.item_id.
 _LIST_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Minhas listas de recomendações"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"page_type":"lists"}'
-    '</script></body></html>'
+    "</script></body></html>"
 )
 
 
@@ -52,28 +52,28 @@ _LIST_BODY = (
 # — Polo Piquet Texturizada, item_id MLB7087251712, bajado el 2026-07-17. Confirmado a
 # mano por Nick: la URL /up/MLBU4214169322 carga el producto real y trackea.
 _UP_URL_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Polo Piquet Texturizada Polo Wear"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
     '"event_data":{"page_type":"affiliate-profile","item_id":"MLB7087251712"}},'
     '"polycards":[{"metadata":{"id":"MLB7087251712","user_product_id":"MLBU4214169322",'
     '"url":"www.mercadolivre.com.br\\u002Fpolo-piquet-texturizada-polo-wear'
     '\\u002Fup\\u002FMLBU4214169322"}}]'
-    '}</script></body></html>'
+    "}</script></body></html>"
 )
 
 # Body real (recortado) de un anuncio tipo "produto.mercadolivre.com.br/MLB-{id}-slug"
 # — Kit Camisetas Tommy Hilfiger, item_id MLB5960042952, bajado el 2026-07-17.
 # Confirmado a mano por Nick: carga el producto real y trackea.
 _PRODUTO_URL_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Kit Camisetas Tommy Hilfiger"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
     '"event_data":{"page_type":"affiliate-profile","item_id":"MLB5960042952"}},'
     '"polycards":[{"metadata":{"id":"MLB5960042952","variation_id":"193307812783",'
     '"url":"produto.mercadolivre.com.br\\u002FMLB-5960042952-kit-camisetas'
     '-tommy-hilfiger-_JM"}}]'
-    '}</script></body></html>'
+    "}</script></body></html>"
 )
 
 # Body sintético con la URL envuelta en un deep-link de Adjust (ddnf.adj.st), como se
@@ -82,16 +82,16 @@ _PRODUTO_URL_BODY = (
 # del deep-link en sí (en los datos reales, "id" y "product_id" pueden diferir del
 # item_id — ver _PRODUCT_BODY para el caso donde no hay match y se cae al fallback).
 _ADJST_WRAPPED_BODY = (
-    '<html><head>'
+    "<html><head>"
     '<meta property="og:title" content="Smart Tv Hisense De 65 Polegadas"/>'
     '</head><body><script>window.__PRELOADED_STATE__={"melidataSocial":{'
     '"event_data":{"page_type":"affiliate-profile","item_id":"MLB54629493"}},'
     '"polycards":[{"metadata":{"id":"MLB54629493","product_id":"MLB54629493",'
     '"url":"ddnf.adj.st\\u002Fwebview\\u002F",'
     '"url_params":"?adj_campaign=social&adj_t=1y8rwb1z&url=https%3A%2F%2Fwww.'
-    'mercadolivre.com.br%2Fsmart-tv-hisense-de-65-polegadas%2Fp%2FMLB54629493'
+    "mercadolivre.com.br%2Fsmart-tv-hisense-de-65-polegadas%2Fp%2FMLB54629493"
     '%3Fmatt_event_ts%3D123"}}]'
-    '}</script></body></html>'
+    "}</script></body></html>"
 )
 
 
@@ -116,12 +116,9 @@ def _boom(url, **kwargs):
 
 
 def test_resolve_url_uses_up_format_for_individual_listing():
-    base_url = resolve_mercadolivre_url(
-        "https://meli.la/1EfwXsp", http_get=_fake_get(_UP_URL_BODY)
-    )
+    base_url = resolve_mercadolivre_url("https://meli.la/1EfwXsp", http_get=_fake_get(_UP_URL_BODY))
     assert base_url == (
-        "https://www.mercadolivre.com.br/polo-piquet-texturizada-polo-wear"
-        "/up/MLBU4214169322"
+        "https://www.mercadolivre.com.br/polo-piquet-texturizada-polo-wear/up/MLBU4214169322"
     )
 
 
@@ -130,8 +127,7 @@ def test_resolve_url_uses_produto_format_for_individual_listing():
         "https://meli.la/1VHk77B", http_get=_fake_get(_PRODUTO_URL_BODY)
     )
     assert base_url == (
-        "https://produto.mercadolivre.com.br"
-        "/MLB-5960042952-kit-camisetas-tommy-hilfiger-_JM"
+        "https://produto.mercadolivre.com.br/MLB-5960042952-kit-camisetas-tommy-hilfiger-_JM"
     )
 
 
@@ -161,8 +157,7 @@ def test_resolve_url_falls_back_to_p_when_no_metadata_match():
 
 def test_resolve_url_returns_none_for_list_page():
     assert (
-        resolve_mercadolivre_url("https://meli.la/1Wn6zLc", http_get=_fake_get(_LIST_BODY))
-        is None
+        resolve_mercadolivre_url("https://meli.la/1Wn6zLc", http_get=_fake_get(_LIST_BODY)) is None
     )
 
 
@@ -180,9 +175,7 @@ def test_resolve_returns_item_id_for_product_page():
 def test_resolve_returns_none_for_list_page():
     """Un link de "lista" (no producto puntual) no trae item_id: sigue yendo a
     reenvío manual, no se inventa un producto."""
-    item_id = resolve_mercadolivre_item(
-        "https://meli.la/1Wn6zLc", http_get=_fake_get(_LIST_BODY)
-    )
+    item_id = resolve_mercadolivre_item("https://meli.la/1Wn6zLc", http_get=_fake_get(_LIST_BODY))
     assert item_id is None
 
 
@@ -229,8 +222,7 @@ def test_retag_mercadolivre_url_builds_expected_link():
         "https://www.mercadolivre.com.br/p/MLB54629493", "lannybot", "56889681"
     )
     assert url == (
-        "https://www.mercadolivre.com.br/p/MLB54629493"
-        "?matt_word=lannybot&matt_tool=56889681"
+        "https://www.mercadolivre.com.br/p/MLB54629493?matt_word=lannybot&matt_tool=56889681"
     )
 
 
@@ -243,8 +235,7 @@ def test_retag_mercadolivre_url_strips_existing_query_and_fragment():
         "56889681",
     )
     assert url == (
-        "https://www.mercadolivre.com.br/p/MLB54629493"
-        "?matt_word=lannybot&matt_tool=56889681"
+        "https://www.mercadolivre.com.br/p/MLB54629493?matt_word=lannybot&matt_tool=56889681"
     )
 
 
@@ -255,8 +246,7 @@ def test_build_own_links_all_resolve():
     )
     assert resolved == {
         "https://meli.la/1Q8EMBW": (
-            "https://www.mercadolivre.com.br/p/MLB54629493"
-            "?matt_word=lannybot&matt_tool=56889681"
+            "https://www.mercadolivre.com.br/p/MLB54629493?matt_word=lannybot&matt_tool=56889681"
         )
     }
 
@@ -272,9 +262,7 @@ def test_build_own_links_none_when_any_fails():
         return _FakeResponse(body)
 
     text = "a https://meli.la/AAA\nb https://meli.la/BBB"
-    assert build_own_mercadolivre_links(
-        text, "lannybot", "56889681", http_get=flaky_get
-    ) is None
+    assert build_own_mercadolivre_links(text, "lannybot", "56889681", http_get=flaky_get) is None
     # Se corta apenas falla BBB: no sigue pidiendo links de más (no hay más acá, pero
     # confirma que no reintenta AAA ni pide nada fuera de los dos del texto).
     assert calls == ["https://meli.la/AAA", "https://meli.la/BBB"]
@@ -298,9 +286,7 @@ def test_build_own_links_resolves_each_shortlink_once():
         return _FakeResponse(_PRODUCT_BODY)
 
     text = "a https://meli.la/1Q8EMBW\nb https://meli.la/1Q8EMBW"
-    build_own_mercadolivre_links(
-        text, "lannybot", "56889681", http_get=counting_get
-    )
+    build_own_mercadolivre_links(text, "lannybot", "56889681", http_get=counting_get)
     assert calls == ["https://meli.la/1Q8EMBW"]
 
 
@@ -320,19 +306,14 @@ def _get_broken_close(url, **kwargs):
 
 def test_resolve_returns_none_when_close_raises():
     """Si close() levanta, debe devolver None y NO propagar la excepción."""
-    item_id = resolve_mercadolivre_item(
-        "https://meli.la/1Q8EMBW", http_get=_get_broken_close
-    )
+    item_id = resolve_mercadolivre_item("https://meli.la/1Q8EMBW", http_get=_get_broken_close)
     assert item_id is None
 
 
 def test_resolve_url_returns_none_when_close_raises():
     """Mismo caso que test_resolve_returns_none_when_close_raises, pero para
     resolve_mercadolivre_url (tiene su propio try/except, separado)."""
-    assert (
-        resolve_mercadolivre_url("https://meli.la/1Q8EMBW", http_get=_get_broken_close)
-        is None
-    )
+    assert resolve_mercadolivre_url("https://meli.la/1Q8EMBW", http_get=_get_broken_close) is None
 
 
 # --- datos del producto (post propio) ---
@@ -356,8 +337,8 @@ _POLYCARD_BODY = (
     '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
     '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
     '"discount_label":{"text":"54% OFF no Pix"}'
-    '}}'
-    ']}]}</script></body></html>'
+    "}}"
+    "]}]}</script></body></html>"
 )
 
 
@@ -392,16 +373,17 @@ def test_resolve_offer_sin_precio_previo_ni_etiqueta_no_tiene_descuento():
 
 
 def test_resolve_offer_none_cuando_no_hay_item_id():
-    assert resolve_mercadolivre_offer(
-        "https://meli.la/X", http_get=_fake_get("pagina sin melidata")
-    ) is None
+    assert (
+        resolve_mercadolivre_offer("https://meli.la/X", http_get=_fake_get("pagina sin melidata"))
+        is None
+    )
 
 
 def test_resolve_offer_none_cuando_no_hay_polycard():
     # el item_id resuelve pero no hay bloque de producto (ej. una pagina vieja/simple)
-    assert resolve_mercadolivre_offer(
-        "https://meli.la/X", http_get=_fake_get(_PRODUCT_BODY)
-    ) is None
+    assert (
+        resolve_mercadolivre_offer("https://meli.la/X", http_get=_fake_get(_PRODUCT_BODY)) is None
+    )
 
 
 def test_resolve_offer_none_en_error_de_red():
@@ -460,8 +442,8 @@ _POLYCARD_WITH_ADJST_URL_BODY = (
     '"previous_price":{"value":625.29,"currency":"BRL","decimal_style":"normal"},'
     '"current_price":{"value":284.99,"currency":"BRL","decimal_style":"superscript"},'
     '"discount_label":{"text":"54% OFF no Pix"}'
-    '}}'
-    ']}]}</script></body></html>'
+    "}}"
+    "]}]}</script></body></html>"
 )
 
 

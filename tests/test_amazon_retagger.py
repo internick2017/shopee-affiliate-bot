@@ -11,22 +11,32 @@ TAG = "ofertaslanny-20"
 
 def test_retag_replaces_existing_tag():
     url = "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=crowmantech-20"
-    assert retag_amazon_url(url, TAG) == "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=ofertaslanny-20"
+    assert (
+        retag_amazon_url(url, TAG) == "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=ofertaslanny-20"
+    )
 
 
 def test_retag_adds_tag_when_missing():
     url = "https://www.amazon.com.br/dp/B0F8BQ3KYW"
-    assert retag_amazon_url(url, TAG) == "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=ofertaslanny-20"
+    assert (
+        retag_amazon_url(url, TAG) == "https://www.amazon.com.br/dp/B0F8BQ3KYW?tag=ofertaslanny-20"
+    )
 
 
 def test_retag_preserves_other_params():
     url = "https://www.amazon.com.br/?linkCode=sl2&tag=crowmantech-20"
-    assert retag_amazon_url(url, TAG) == "https://www.amazon.com.br/?linkCode=sl2&tag=ofertaslanny-20"
+    assert (
+        retag_amazon_url(url, TAG) == "https://www.amazon.com.br/?linkCode=sl2&tag=ofertaslanny-20"
+    )
 
 
 def test_extract_amazon_links():
-    text = "Ofertaça 💵 R$ 19\nhttps://www.amazon.com.br/dp/B07QZB3PDY?tag=crowmantech-20\n\nanúncio"
-    assert extract_amazon_links(text) == ["https://www.amazon.com.br/dp/B07QZB3PDY?tag=crowmantech-20"]
+    text = (
+        "Ofertaça 💵 R$ 19\nhttps://www.amazon.com.br/dp/B07QZB3PDY?tag=crowmantech-20\n\nanúncio"
+    )
+    assert extract_amazon_links(text) == [
+        "https://www.amazon.com.br/dp/B07QZB3PDY?tag=crowmantech-20"
+    ]
 
 
 def test_extract_amazon_links_none():

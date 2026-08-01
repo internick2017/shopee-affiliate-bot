@@ -187,9 +187,7 @@ def test_resolve_offer_error_de_red():
     def get_roto(url, **kwargs):
         raise ConnectionError("boom")
 
-    offer = resolve_shopee_offer(
-        "https://s.shopee.com.br/XXX", APP_ID, SECRET, http_get=get_roto
-    )
+    offer = resolve_shopee_offer("https://s.shopee.com.br/XXX", APP_ID, SECRET, http_get=get_roto)
 
     assert offer is None
 

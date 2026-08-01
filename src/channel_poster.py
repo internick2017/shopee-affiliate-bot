@@ -66,9 +66,7 @@ class ChannelPoster:
         """`image` puede ser una URL o un objeto de media de Telethon (p. ej. el
         `photo` del mensaje original, que se reenvía por referencia sin descargarlo)."""
         if len(text) > self.CAPTION_LIMIT:
-            await self._retrying(
-                lambda: self._client.send_file(self._channel, file=image)
-            )
+            await self._retrying(lambda: self._client.send_file(self._channel, file=image))
             await self.post_text(text)
             return
         await self._retrying(

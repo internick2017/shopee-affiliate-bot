@@ -5,6 +5,7 @@ El token del path NO es el ASIN: hay que seguir el redirect para saber qué prod
 La URL final trae el tag y la atribución del afiliado de origen, así que se canonicaliza
 a `amazon.com.br/dp/{ASIN}` — re-taguear encima no borraría `ascsubtag`/`btn_ref`.
 """
+
 import logging
 from collections.abc import Callable
 

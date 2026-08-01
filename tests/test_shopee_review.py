@@ -53,12 +53,7 @@ def test_build_shopee_review_message_marks_and_keeps_links():
 
 
 def test_build_shopee_review_message_strips_competitor_footer():
-    text = (
-        "Produto X\n"
-        "https://s.shopee.com.br/abc\n"
-        "🛍 Grupos de promos:\n"
-        "https://ctlinks.com.br"
-    )
+    text = "Produto X\nhttps://s.shopee.com.br/abc\n🛍 Grupos de promos:\nhttps://ctlinks.com.br"
     msg = build_shopee_review_message(text)
     assert "ctlinks.com.br" not in msg
     assert "Grupos de promos" not in msg
@@ -276,10 +271,7 @@ def test_auto_post_solo_cupom_sin_producto():
 
 
 def test_auto_post_dos_productos_es_ambiguo():
-    texto = (
-        "https://s.shopee.com.br/PRODUTO1\n"
-        "https://s.shopee.com.br/PRODUTO2"
-    )
+    texto = "https://s.shopee.com.br/PRODUTO1\nhttps://s.shopee.com.br/PRODUTO2"
     msg = build_shopee_auto_post(
         texto,
         APP_ID,
@@ -298,17 +290,12 @@ def test_auto_post_dos_productos_es_ambiguo():
 
 
 def test_auto_post_sin_hook_es_none():
-    msg = build_shopee_auto_post(
-        "https://s.shopee.com.br/PRODUTO", APP_ID, SECRET, hook=None
-    )
+    msg = build_shopee_auto_post("https://s.shopee.com.br/PRODUTO", APP_ID, SECRET, hook=None)
     assert msg is None
 
 
 def test_auto_post_retag_de_extra_falla_no_tumba_el_post():
-    texto = (
-        "https://s.shopee.com.br/CUPOM\n"
-        "https://s.shopee.com.br/PRODUTO"
-    )
+    texto = "https://s.shopee.com.br/CUPOM\nhttps://s.shopee.com.br/PRODUTO"
     error = {"errors": [{"extensions": {"code": 11001}}]}
     msg = build_shopee_auto_post(
         texto,
@@ -330,9 +317,7 @@ def test_auto_post_retag_de_extra_falla_no_tumba_el_post():
 
 async def test_pipeline_auto_posts_cuando_configurado_y_resuelve():
     poster = FakePoster()
-    pipe = ShopeeReviewPipeline(
-        poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET
-    )
+    pipe = ShopeeReviewPipeline(poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET)
 
     import src.shopee_review as module
 
@@ -431,9 +416,7 @@ def test_auto_post_umbral_personalizado_se_respeta():
 
 async def test_pipeline_no_reenvia_oferta_descartada_por_comision():
     poster = FakePoster()
-    pipe = ShopeeReviewPipeline(
-        poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET
-    )
+    pipe = ShopeeReviewPipeline(poster, dedup=FakeDedup(), app_id=APP_ID, secret=SECRET)
 
     import src.shopee_review as module
 
@@ -466,8 +449,7 @@ def test_auto_post_dos_links_uno_sin_descuento_no_dispara_descarte():
     body_bajo_umbral["data"]["productOfferV2"]["nodes"][0]["commissionRate"] = "0.03"
 
     texto = (
-        "Produto A\nhttps://s.shopee.com.br/PRODUTO_A\n"
-        "Produto B\nhttps://s.shopee.com.br/PRODUTO_B"
+        "Produto A\nhttps://s.shopee.com.br/PRODUTO_A\nProduto B\nhttps://s.shopee.com.br/PRODUTO_B"
     )
     msg = build_shopee_auto_post(
         texto,

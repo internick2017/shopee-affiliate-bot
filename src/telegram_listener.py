@@ -28,6 +28,7 @@ Setup (first run)
    one-time code Telegram sends.  After that a ``shopee_user_session.string``
    file is written and subsequent runs are automatic.
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,6 +65,7 @@ def _append_observation(path, *, chat_id, chat_title, in_scope, text, ts=None) -
     Best-effort: never raises (observation logging must not crash the bot)."""
     import json
     import os
+
     try:
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         record = {
@@ -138,9 +140,7 @@ class TelethonListener:
                 logger.warning("Could not read session file %s: %s", session_file, exc)
 
         self._session_file = session_file
-        self._client = TelegramClient(
-            StringSession(session_string), int(api_id), api_hash
-        )
+        self._client = TelegramClient(StringSession(session_string), int(api_id), api_hash)
 
         @self._client.on(events.NewMessage)
         async def _handler(event):  # pragma: no cover - requires live telegram
@@ -151,26 +151,26 @@ class TelethonListener:
                     return
                 chat = await event.get_chat()
                 chat_id = getattr(chat, "id", None)
-                chat_title = (
-                    getattr(chat, "title", None)
-                    or getattr(chat, "username", None)
-                )
-                in_scope = should_process(
-                    chat_id, chat_title, self.config.allowed_chats
-                )
+                chat_title = getattr(chat, "title", None) or getattr(chat, "username", None)
+                in_scope = should_process(chat_id, chat_title, self.config.allowed_chats)
                 if self.config.observe:
                     preview = text.replace("\n", " ⏎ ")[:120]
                     logger.info(
                         "[OBSERVE] chat=%r id=%s in_scope=%s | %s",
-                        chat_title, chat_id, in_scope, preview,
+                        chat_title,
+                        chat_id,
+                        in_scope,
+                        preview,
                     )
                     if self.config.observe_file and (
                         in_scope or not self.config.observe_file_in_scope_only
                     ):
                         _append_observation(
                             self.config.observe_file,
-                            chat_id=chat_id, chat_title=chat_title,
-                            in_scope=in_scope, text=text,
+                            chat_id=chat_id,
+                            chat_title=chat_title,
+                            in_scope=in_scope,
+                            text=text,
                             ts=getattr(msg, "date", None),
                         )
                 if not in_scope:
@@ -181,9 +181,7 @@ class TelethonListener:
                 # reenviarla por referencia evita descargarla y volverla a subir.
                 await self.on_text(text, chat_title, photo=getattr(msg, "photo", None))
             except Exception as exc:
-                logger.error(
-                    "Telethon handler error: %s", exc, exc_info=True
-                )
+                logger.error("Telethon handler error: %s", exc, exc_info=True)
 
         await self._client.start()  # interactive first run: prompts phone + code
 
@@ -196,9 +194,7 @@ class TelethonListener:
         except Exception as exc:
             logger.warning("Could not save session string: %s", exc)
 
-        logger.info(
-            "Telethon listener started (reading as your user account)."
-        )
+        logger.info("Telethon listener started (reading as your user account).")
 
     async def notify(self, text: str) -> None:
         """Send a message to the user's own Telegram 'Saved Messages' (the 'me'

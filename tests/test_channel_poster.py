@@ -10,9 +10,7 @@ class _FakeTelethonClient:
         self.calls.append({"channel": channel, "file": file, "caption": caption})
 
     async def send_message(self, channel, text, link_preview):
-        self.text_calls.append(
-            {"channel": channel, "text": text, "link_preview": link_preview}
-        )
+        self.text_calls.append({"channel": channel, "text": text, "link_preview": link_preview})
 
 
 async def test_post_sends_file_with_caption():

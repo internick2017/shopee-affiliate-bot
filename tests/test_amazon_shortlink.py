@@ -1,4 +1,3 @@
-
 from src.amazon_shortlink import (
     expand_amazon_shortlinks,
     extract_amazon_shortlinks,
@@ -58,16 +57,12 @@ def test_extract_amazon_shortlinks():
 
 def test_resolve_canonicalizes_to_dp_asin():
     """El path del shortlink NO es el ASIN: link.amazon/B05ZZOGMH -> dp/B0754J12RW."""
-    url = resolve_amazon_shortlink(
-        "https://link.amazon/B05ZZOGMH", http_get=_fake_get(RESUELTA)
-    )
+    url = resolve_amazon_shortlink("https://link.amazon/B05ZZOGMH", http_get=_fake_get(RESUELTA))
     assert url == "https://www.amazon.com.br/dp/B0754J12RW"
 
 
 def test_resolve_drops_foreign_attribution():
-    url = resolve_amazon_shortlink(
-        "https://link.amazon/B05ZZOGMH", http_get=_fake_get(RESUELTA)
-    )
+    url = resolve_amazon_shortlink("https://link.amazon/B05ZZOGMH", http_get=_fake_get(RESUELTA))
     for rastro in ("amgbrt-20", "ascsubtag", "btn_ref", "linkId", "linkCode"):
         assert rastro not in url
 

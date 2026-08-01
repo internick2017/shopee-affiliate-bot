@@ -60,12 +60,7 @@ def _clean_candidate(line: str) -> str:
 
 def _is_coupon_announcement(cleaned: str) -> bool:
     lower = cleaned.lower()
-    return (
-        "cupom" in lower
-        or "cupons" in lower
-        or "% off" in lower
-        or "off em r$" in lower
-    )
+    return "cupom" in lower or "cupons" in lower or "% off" in lower or "off em r$" in lower
 
 
 def extract_product_names(text: str | None) -> list[str]:

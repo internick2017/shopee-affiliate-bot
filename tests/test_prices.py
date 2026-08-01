@@ -72,6 +72,7 @@ def test_is_price_line_not_confused_by_de_por_words():
 
 # --- Promocasinha: precio con insignia de descuento ---
 
+
 def test_price_line_with_discount_badge():
     """'Por: R$ 6,66 (44% off)' es un PRECIO con insignia, no una línea de cupón."""
     assert is_price_line("Por: R$ 6,66 (44% off)")
@@ -96,6 +97,7 @@ def test_extract_price_ignores_discount_badge_percentage():
 
 
 # --- Crowman: "a partir de X" sin R$, y descuentos en R$ que no son precios ---
+
 
 def test_a_partir_de_without_rs_is_a_price_line():
     """Crowman (Dove): 'a partir de 28,39 à vista'. Sin esto el mensaje se descarta entero."""
@@ -127,7 +129,7 @@ def test_discount_badge_after_price_still_a_price():
 
 
 def test_dot_with_two_decimals_is_not_a_thousands_separator():
-    """"99.90" es 99,90 en formato en-US. Tratarlo como miles lo multiplicaba por cien."""
+    """ "99.90" es 99,90 en formato en-US. Tratarlo como miles lo multiplicaba por cien."""
     assert parse_br_number("99.90") == Decimal("99.90")
     assert parse_br_number("100.00") == Decimal("100.00")
     assert parse_br_number("1.23") == Decimal("1.23")
@@ -144,6 +146,6 @@ def test_comma_still_wins_as_decimal_separator():
 
 
 def test_coupon_ceiling_is_not_a_product_price():
-    """"Limite de R$ 50" es el tope del cupón; anclaba el nombre basura "Limite de"."""
+    """ "Limite de R$ 50" es el tope del cupón; anclaba el nombre basura "Limite de"."""
     assert is_coupon_line("Limite de R$ 50")
     assert not is_price_line("Limite de R$ 50")

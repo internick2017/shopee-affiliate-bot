@@ -10,6 +10,7 @@ eso alcanza para armar el link propio sin pasar por la Central de Afiliados. Cua
 el link es de tipo "lista" (sin item_id resoluble), no hay nada que automatizar: se
 sigue reenviando marcado para que Nick lo genere a mano.
 """
+
 import asyncio
 import logging
 import re
@@ -58,18 +59,37 @@ DEFAULT_MARKER = "⚠️ MERCADO LIVRE: gerar link de afiliado e postar manual"
 #     "2026" cerca de la palabra "cupom" se leería como código.
 #   - El código puede EMPEZAR con dígito ("15ACESS" es un cupón real de Promocasinha),
 #     por eso `[A-Z0-9]{4,25}` y no `[A-Z][A-Z0-9]{3,24}`.
-_CUPON_RE = re.compile(
-    r"(?i:cupom)\b[^\n:]{0,30}:?\s*\b(?=[A-Z0-9]*[A-Z])([A-Z0-9]{4,25})\b"
-)
+_CUPON_RE = re.compile(r"(?i:cupom)\b[^\n:]{0,30}:?\s*\b(?=[A-Z0-9]*[A-Z])([A-Z0-9]{4,25})\b")
 
 # Palabras que siguen a "cupom" en frases sueltas y NO son códigos. Salieron de medir
 # 600 mensajes reales de los 3 canales fuente el 2026-07-18: sin este filtro se
 # publicaba "CUPOM: MERCADO" o "CUPOM: SELECIONADOS", que no sirven de nada.
-_CUPON_STOPWORDS = frozenset({
-    "MERCADO", "LIVRE", "LOJA", "SELECIONADOS", "ESGOTADO", "LIMITADO", "SHOPEE",
-    "AMAZON", "PRODUTOS", "DESCONTO", "DESCONTOS", "EXCLUSIVO", "EXCLUSIVA", "PRIME",
-    "COMPRAS", "PIX", "FRETE", "GRATIS", "OFERTA", "OFERTAS", "PROMO", "VALIDO",
-})
+_CUPON_STOPWORDS = frozenset(
+    {
+        "MERCADO",
+        "LIVRE",
+        "LOJA",
+        "SELECIONADOS",
+        "ESGOTADO",
+        "LIMITADO",
+        "SHOPEE",
+        "AMAZON",
+        "PRODUTOS",
+        "DESCONTO",
+        "DESCONTOS",
+        "EXCLUSIVO",
+        "EXCLUSIVA",
+        "PRIME",
+        "COMPRAS",
+        "PIX",
+        "FRETE",
+        "GRATIS",
+        "OFERTA",
+        "OFERTAS",
+        "PROMO",
+        "VALIDO",
+    }
+)
 
 # Un cupón con la marca de un canal fuente puede ser de SU programa de afiliados: la
 # ayuda oficial de ML (mercadolivre.com.br/ajuda/35616) confirma que existen cupones
@@ -99,9 +119,7 @@ def extract_cupon(text: str | None) -> str | None:
     return None
 
 
-def build_mercadolivre_review_message(
-    text: str | None, marker: str = DEFAULT_MARKER
-) -> str | None:
+def build_mercadolivre_review_message(text: str | None, marker: str = DEFAULT_MARKER) -> str | None:
     """Marca + texto original sin el footer del competidor ni los productos de otras
     plataformas. None si no hay ML."""
     return build_review_message(text, _MERCADOLIVRE_RE, marker, platform=PLATFORM)
@@ -129,9 +147,7 @@ def _build_post_propio(
         price_final=offer.precio,
         image_url="",
         price_original=offer.precio_previo,
-        affiliate_link=retag_mercadolivre_url(
-            offer.url_canonica, matt_word, matt_tool
-        ),
+        affiliate_link=retag_mercadolivre_url(offer.url_canonica, matt_word, matt_tool),
     )
     return build_post(producto, hook, extra_lines=tuple(extras))
 
@@ -228,9 +244,7 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
             if auto_msg:
                 key = self.dedup_key(text)
                 if key and self._dedup and not self._dedup.claim(key):
-                    logger.info(
-                        "Oferta de Mercado Livre ya publicada (%s); se omite", key
-                    )
+                    logger.info("Oferta de Mercado Livre ya publicada (%s); se omite", key)
                     return 1
                 try:
                     await post_offer(self._poster, auto_msg, photo)

@@ -6,6 +6,7 @@ Ver `shopee_resolver.py` para el porqué de "un producto por post" y de la
 clasificación de links extra (cupón/campaña vs. ruido a ignorar) — decisiones
 tomadas en docs/superpowers/specs/2026-07-18-shopee-post-propio-design.md.
 """
+
 import asyncio
 import logging
 from collections.abc import Callable
@@ -46,9 +47,7 @@ def has_shopee_links(text: str | None) -> bool:
     return has_links(text, _SHOPEE_RE)
 
 
-def build_shopee_review_message(
-    text: str | None, marker: str = DEFAULT_MARKER
-) -> str | None:
+def build_shopee_review_message(text: str | None, marker: str = DEFAULT_MARKER) -> str | None:
     """Si hay link de Shopee, arma el mensaje a revisar: marca + texto (sin footer del
     competidor ni los productos de otras plataformas). None si no hay Shopee."""
     return build_review_message(text, _SHOPEE_RE, marker, platform=PLATFORM)
@@ -60,9 +59,7 @@ def shopee_dedup_key(text: str | None) -> str | None:
     return review_dedup_key(text, _SHOPEE_RE, PLATFORM)
 
 
-def _build_post_propio(
-    offer: ShopeeOffer, extra_link: str | None, hook: str
-) -> str:
+def _build_post_propio(offer: ShopeeOffer, extra_link: str | None, hook: str) -> str:
     """El post con el template de Lanny y los datos que Shopee informa AHORA."""
     extras: list[str] = [f"🏷️ {offer.descuento_pct}% OFF"]
     if extra_link:

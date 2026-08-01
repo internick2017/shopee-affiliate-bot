@@ -21,7 +21,10 @@ def test_extract_price_discount():
 
 
 def test_extract_price_a_vista():
-    assert extract_price("Jogo para Churrasco 12 pçs\n69,99 à vista\nhttps://x") == (Decimal("69.99"), None)
+    assert extract_price("Jogo para Churrasco 12 pçs\n69,99 à vista\nhttps://x") == (
+        Decimal("69.99"),
+        None,
+    )
 
 
 def test_extract_price_takes_first_of_two():

@@ -131,14 +131,17 @@ def test_all_handlers_raise_returns_zero():
 
 # --- router completo: Amazon + Shopee + Mercado Livre ---
 
+
 def _full_pipeline(amazon_poster, shopee_poster, ml_poster):
     from src.mercadolivre_review import MercadoLivreReviewPipeline
 
-    return OfferPipeline([
-        AmazonPipeline("ofertaslanny-20", amazon_poster, HookBank(["GANCHO"])),
-        ShopeeReviewPipeline(shopee_poster),
-        MercadoLivreReviewPipeline(ml_poster),
-    ])
+    return OfferPipeline(
+        [
+            AmazonPipeline("ofertaslanny-20", amazon_poster, HookBank(["GANCHO"])),
+            ShopeeReviewPipeline(shopee_poster),
+            MercadoLivreReviewPipeline(ml_poster),
+        ]
+    )
 
 
 def test_ml_message_goes_to_ml_poster_only():

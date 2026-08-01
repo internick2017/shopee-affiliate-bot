@@ -52,10 +52,5 @@ def test_amazon_shortlink_counts_as_amazon_for_other_platforms():
 
 
 def test_meli_shortlink_matches_only_short_form():
-    assert MELI_SHORTLINK_RE.findall("olha https://meli.la/19ZAxqR,") == [
-        "https://meli.la/19ZAxqR"
-    ]
-    assert (
-        MELI_SHORTLINK_RE.findall("https://www.mercadolivre.com.br/social/x?ref=abc")
-        == []
-    )
+    assert MELI_SHORTLINK_RE.findall("olha https://meli.la/19ZAxqR,") == ["https://meli.la/19ZAxqR"]
+    assert MELI_SHORTLINK_RE.findall("https://www.mercadolivre.com.br/social/x?ref=abc") == []

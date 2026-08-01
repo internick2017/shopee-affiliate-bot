@@ -106,7 +106,5 @@ def test_build_post_sin_extras_no_cambia():
         affiliate_link="https://ml/x",
     )
 
-    assert build_post(producto, "GANCHO") == build_post(
-        producto, "GANCHO", extra_lines=()
-    )
+    assert build_post(producto, "GANCHO") == build_post(producto, "GANCHO", extra_lines=())
     assert "🏷️" not in build_post(producto, "GANCHO")

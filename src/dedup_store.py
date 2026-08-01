@@ -25,8 +25,7 @@ class DedupStore:
         # que es un alias de rowid y rechaza texto. Un .db viejo conserva ese
         # esquema, así que se usa otro nombre en vez de intentar migrarlo.
         self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS seen_keys ("
-            "key TEXT PRIMARY KEY, ts REAL NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS seen_keys (key TEXT PRIMARY KEY, ts REAL NOT NULL)"
         )
         self._conn.commit()
 
@@ -69,9 +68,7 @@ class DedupStore:
     def seen(self, key: int | str, *, now: float | None = None) -> bool:
         """Consulta sin reservar. Preferí `claim` antes de publicar."""
         now = time.time() if now is None else now
-        row = self._conn.execute(
-            "SELECT ts FROM seen_keys WHERE key = ?", (str(key),)
-        ).fetchone()
+        row = self._conn.execute("SELECT ts FROM seen_keys WHERE key = ?", (str(key),)).fetchone()
         if row is None:
             return False
         return (now - row[0]) < self._ttl_seconds

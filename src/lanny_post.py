@@ -1,4 +1,3 @@
-
 from .amazon_retagger import retag_amazon_url
 from .models import Product
 from .offers import Offer, extract_offers

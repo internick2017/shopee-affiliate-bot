@@ -1,4 +1,5 @@
 """Los mensajes son reales, de Crowman e IAchados. Cada uno rompe una regla distinta."""
+
 from decimal import Decimal
 
 from src.offers import extract_offers
@@ -66,11 +67,7 @@ VITAFOR = (
     "🔗 https://www.amazon.com.br/dp/B07939CW22?th=1&psc=1&tag=iachadospromo-20\n"
 )
 
-SIMPLE = (
-    "🔥 Smirnoff Vodka 600Ml\n\n"
-    "💵 R$ 19\n"
-    f"https://www.amazon.com.br/dp/B07QZB3PDY{TAGS}\n"
-)
+SIMPLE = f"🔥 Smirnoff Vodka 600Ml\n\n💵 R$ 19\nhttps://www.amazon.com.br/dp/B07QZB3PDY{TAGS}\n"
 
 
 def _asins(offers):
@@ -78,6 +75,7 @@ def _asins(offers):
 
 
 # --- caso normal: un producto ---
+
 
 def test_single_offer():
     offers = extract_offers(SIMPLE)
@@ -96,6 +94,7 @@ def test_no_offers_without_amazon_link():
 
 
 # --- variantes etiquetadas: un precio, varios links ---
+
 
 def test_dove_variants_share_the_range_price():
     offers = extract_offers(DOVE)
@@ -118,6 +117,7 @@ def test_duracell_variants():
 
 # --- lo que NO se debe inferir ---
 
+
 def test_elixir_second_link_has_no_price_and_is_dropped():
     """El link de 40ml no tiene precio propio: heredar los R$ 18,80 del 100ml sería mentir."""
     offers = extract_offers(ELIXIR)
@@ -137,6 +137,7 @@ def test_vitafor_same_asin_twice_yields_one_offer_at_the_first_price():
 
 # --- nombre en la propia línea de precio ---
 
+
 def test_ps4_names_come_from_the_price_line():
     offers = extract_offers(PS4)
     assert [o.name for o in offers] == ["The Last of Us", "Bloodborne"]
@@ -149,6 +150,7 @@ def test_ps4_header_is_never_used_as_a_product_name():
 
 
 # --- mensaje mixto Amazon + Mercado Livre ---
+
 
 def test_mixed_message_yields_only_the_amazon_offers():
     offers = extract_offers(BRAE_MIXTO)

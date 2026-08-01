@@ -8,6 +8,7 @@ canal de esa plataforma y el owner arma el link a mano.
 La lógica es la misma para las dos, así que vive acá una sola vez: lo único que
 cambia es qué links detectar, con qué marca y con qué prefijo de dedup.
 """
+
 import logging
 import re
 
@@ -56,9 +57,7 @@ def _split_blocks(text: str) -> list[str]:
     return blocks
 
 
-def drop_foreign_blocks(
-    text: str, link_re: re.Pattern, foreign_res: tuple[re.Pattern, ...]
-) -> str:
+def drop_foreign_blocks(text: str, link_re: re.Pattern, foreign_res: tuple[re.Pattern, ...]) -> str:
     """Quita los bloques cuyo único link es de otra plataforma.
 
     Un mensaje de Crowman trae Amazon y Mercado Livre mezclados. Sin esto, el canal de
@@ -94,17 +93,13 @@ def build_review_message(
         return None
     assert text is not None
     filtered = "\n".join(
-        line
-        for line in text.split("\n")
-        if not any(m in line.lower() for m in FOOTER_MARKERS)
+        line for line in text.split("\n") if not any(m in line.lower() for m in FOOTER_MARKERS)
     )
     filtered = drop_foreign_blocks(filtered, link_re, foreign_link_res(platform))
     return f"{marker}\n\n{filtered.strip()}"
 
 
-def review_dedup_key(
-    text: str | None, link_re: re.Pattern, prefix: str
-) -> str | None:
+def review_dedup_key(text: str | None, link_re: re.Pattern, prefix: str) -> str | None:
     """Clave de dedup a partir de los links, sin query params (`?lp=aff` cambia
     según quién postee) y ordenados (el orden en el mensaje no significa nada).
 
@@ -136,9 +131,7 @@ class ReviewPipeline:
         return review_dedup_key(text, self._link_re, self._prefix)
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
-        msg = build_review_message(
-            text, self._link_re, self._marker, platform=self._prefix
-        )
+        msg = build_review_message(text, self._link_re, self._marker, platform=self._prefix)
         if not msg:
             return 0
 

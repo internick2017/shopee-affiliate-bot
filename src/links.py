@@ -4,6 +4,7 @@ Nadie más define regexes de URL: los handlers importan de acá. Así `review_fo
 puede saber qué links son "de otra plataforma" sin importar a los handlers (que a su
 vez lo importan a él).
 """
+
 import re
 
 # Un link termina donde termina la URL, no donde termina la palabra. `\S+` se tragaba
@@ -16,21 +17,20 @@ AMAZON_LINK_RE = re.compile(r"https?://(?:[\w-]+\.)*amazon\.com\.br/" + _URL_TAI
 
 # `link.amazon/XXX` (shortener propio) y `amzn.to/XXX` (bit.ly de Amazon). El token
 # del path no es el ASIN: hay que seguir el redirect (ver `amazon_shortlink.py`).
-AMAZON_SHORTLINK_RE = re.compile(
-    r"https?://link\.amazon/\w+|https?://amzn\.to/\w+", re.IGNORECASE
-)
+AMAZON_SHORTLINK_RE = re.compile(r"https?://link\.amazon/\w+|https?://amzn\.to/\w+", re.IGNORECASE)
 
 # shopee.com.br, s.shopee.com.br y el shortener shp.ee.
 SHOPEE_LINK_RE = re.compile(
-    r"https?://(?:[\w-]+\.)*shopee\.com\.br/" + _URL_TAIL
-    + r"|https?://shp\.ee/" + _URL_TAIL,
+    r"https?://(?:[\w-]+\.)*shopee\.com\.br/" + _URL_TAIL + r"|https?://shp\.ee/" + _URL_TAIL,
     re.IGNORECASE,
 )
 
 # meli.la (shortlink) y el link largo mercadolivre.com / mercadolivre.com.br.
 MERCADOLIVRE_LINK_RE = re.compile(
-    r"https?://meli\.la/" + _URL_TAIL
-    + r"|https?://(?:[\w-]+\.)*mercadolivre\.com(?:\.br)?/" + _URL_TAIL,
+    r"https?://meli\.la/"
+    + _URL_TAIL
+    + r"|https?://(?:[\w-]+\.)*mercadolivre\.com(?:\.br)?/"
+    + _URL_TAIL,
     re.IGNORECASE,
 )
 

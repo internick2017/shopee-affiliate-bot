@@ -17,6 +17,7 @@ item_id, un campo "url" con la ruta REAL del producto (`/up/{user_product_id}`,
 desenvolver). Cuando no se encuentra ese campo (típicamente porque el item_id YA es un
 ID de catálogo), se cae al `/p/{item_id}` de siempre, que funciona para ese caso.
 """
+
 import json
 import logging
 import re
@@ -100,9 +101,7 @@ def _extract_canonical_url(item_id: str, body: str) -> str | None:
     entrada de recomendación propia en la página, y no hace falta: /p/{item_id} ya
     funciona directo para ese caso).
     """
-    match = re.search(
-        r'"id":"' + re.escape(item_id) + r'"(?:(?!\}).)*?"url":"([^"]*)"', body
-    )
+    match = re.search(r'"id":"' + re.escape(item_id) + r'"(?:(?!\}).)*?"url":"([^"]*)"', body)
     if not match:
         return None
     raw_url = match.group(1).replace("\\u002F", "/").replace("\\/", "/")
@@ -140,9 +139,7 @@ def resolve_mercadolivre_item(
             close()
         item_id = _extract_item_id(body)
         if not item_id:
-            logger.info(
-                "El link %s no trajo un item_id resoluble (no es producto puntual)", url
-            )
+            logger.info("El link %s no trajo un item_id resoluble (no es producto puntual)", url)
         return item_id
     except Exception as exc:
         logger.warning("No se pudo resolver el link de Mercado Livre %s: %s", url, exc)
@@ -167,9 +164,7 @@ def resolve_mercadolivre_url(
             close()
         item_id = _extract_item_id(body)
         if not item_id:
-            logger.info(
-                "El link %s no trajo un item_id resoluble (no es producto puntual)", url
-            )
+            logger.info("El link %s no trajo un item_id resoluble (no es producto puntual)", url)
             return None
         canonical = _extract_canonical_url(item_id, body)
         if canonical:
@@ -301,9 +296,7 @@ def _a_decimal(valor) -> Decimal | None:
         return None
 
 
-def resolve_mercadolivre_offer(
-    url: str, *, http_get=_default_get
-) -> MercadoLivreOffer | None:
+def resolve_mercadolivre_offer(url: str, *, http_get=_default_get) -> MercadoLivreOffer | None:
     """Título, precio y descuento reales del producto detrás del shortlink.
 
     Un solo fetch, el mismo que ya se hacía para resolver la URL. None si algo falta:
