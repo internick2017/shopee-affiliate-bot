@@ -246,7 +246,7 @@ def _extract_polycard(item_id: str, body: str) -> dict | None:
     componente varía (`price` puede colgar directo del bloque o de más adentro) y una
     regex sobre una ventana fija se rompe con esas variaciones.
     """
-    idx = body.find('"id":"%s"' % item_id)
+    idx = body.find(f'"id":"{item_id}"')
     if idx < 0:
         return None
     start = body.rfind('{"unique_id"', max(0, idx - 20000), idx)

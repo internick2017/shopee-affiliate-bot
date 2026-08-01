@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from src.mercadolivre_resolver import (
-    MercadoLivreOffer,
     build_own_mercadolivre_links,
     extract_meli_shortlinks,
     has_meli_shortlinks,
