@@ -67,7 +67,9 @@ def test_generate_post_reply_con_link_valido():
     assert reply.error is None
     assert reply.photo_url == "https://cf.shopee.com.br/file/abc"
     assert "Kit Panos de Limpeza" in reply.caption
-    assert "https://s.shopee.com.br/propio" in reply.caption
+    # Sin credenciales propias, el link del post es el que el usuario mandó, no el
+    # offerLink de la cuenta por defecto — ver test_generate_post_reply_sin_credenciales_*.
+    assert "https://s.shopee.com.br/XXXX" in reply.caption
 
 
 def test_generate_post_reply_sin_link_de_shopee():
@@ -110,3 +112,48 @@ def test_generate_post_reply_sin_descuento():
 
     assert reply.caption is None
     assert reply.error is not None
+
+
+def test_generate_post_reply_sin_credenciales_propias_devuelve_link_original():
+    hooks = HookBank(["Hook único de teste"])
+    get = _fake_get("https://shopee.com.br/produto-i.860748832.23498094336")
+    post = _fake_post(_PRODUCT_OFFER_BODY)
+
+    reply = generate_post_reply(
+        "https://s.shopee.com.br/LINK_DO_DANIEL",
+        "app_id_lanny",
+        "secret_lanny",
+        hooks,
+        http_get=get,
+        http_post=post,
+    )
+
+    assert reply.error is None
+    # El link del post es el que Daniel mandó, NO el offerLink de la cuenta por
+    # defecto (que la fixture pone en "https://s.shopee.com.br/propio").
+    assert "https://s.shopee.com.br/LINK_DO_DANIEL" in reply.caption
+    assert "https://s.shopee.com.br/propio" not in reply.caption
+
+
+def test_generate_post_reply_con_credenciales_propias_usa_su_link():
+    hooks = HookBank(["Hook único de teste"])
+    body_propio = json.loads(json.dumps(_PRODUCT_OFFER_BODY))
+    body_propio["data"]["productOfferV2"]["nodes"][0]["offerLink"] = (
+        "https://s.shopee.com.br/LINK_PROPRIO_DO_DANIEL"
+    )
+    get = _fake_get("https://shopee.com.br/produto-i.860748832.23498094336")
+    post = _fake_post(body_propio)
+
+    reply = generate_post_reply(
+        "https://s.shopee.com.br/LINK_QUE_DANIEL_MANDOU",
+        "app_id_lanny",
+        "secret_lanny",
+        hooks,
+        user_credentials=("app_id_daniel", "secret_daniel"),
+        http_get=get,
+        http_post=post,
+    )
+
+    assert reply.error is None
+    assert "https://s.shopee.com.br/LINK_PROPRIO_DO_DANIEL" in reply.caption
+    assert "https://s.shopee.com.br/LINK_QUE_DANIEL_MANDOU" not in reply.caption
