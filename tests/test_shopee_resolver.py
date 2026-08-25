@@ -59,6 +59,7 @@ _PRODUCT_OFFER_BODY = {
                     "priceDiscountRate": 83,
                     "commissionRate": "0.12",
                     "offerLink": "https://s.shopee.com.br/9pcpWfgiuH",
+                    "imageUrl": "https://cf.shopee.com.br/file/abc123",
                 }
             ]
         }
@@ -96,6 +97,30 @@ def test_extract_shopee_shortlinks():
 def test_extract_shopee_shortlinks_vacio():
     assert extract_shopee_shortlinks(None) == []
     assert extract_shopee_shortlinks("sem shopee aqui") == []
+
+
+def test_resolve_shopee_offer_incluye_imagen():
+    get = _fake_get("https://shopee.com.br/produto-i.860748832.23498094336")
+    post = _fake_post(_PRODUCT_OFFER_BODY)
+
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/XXXX", APP_ID, SECRET, http_get=get, http_post=post
+    )
+
+    assert offer.imagen_url == "https://cf.shopee.com.br/file/abc123"
+
+
+def test_resolve_shopee_offer_sin_imagen_es_none():
+    body = json.loads(json.dumps(_PRODUCT_OFFER_BODY))  # copia profunda
+    del body["data"]["productOfferV2"]["nodes"][0]["imageUrl"]
+    get = _fake_get("https://shopee.com.br/produto-i.860748832.23498094336")
+    post = _fake_post(body)
+
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/XXXX", APP_ID, SECRET, http_get=get, http_post=post
+    )
+
+    assert offer.imagen_url is None
 
 
 def test_resolve_offer_formato_1_con_datos():

@@ -195,6 +195,7 @@ class ShopeeOffer:
     comision_pct: Decimal
     link_propio: str
     precio_previo: Decimal | None = None
+    imagen_url: str | None = None
 
     @property
     def tiene_descuento(self) -> bool:
@@ -226,7 +227,7 @@ def resolve_shopee_offer(
     query = f"""
     query {{
       productOfferV2(itemId: {item_id}, shopId: {shop_id}, limit: 1) {{
-        nodes {{ productName price priceDiscountRate offerLink commissionRate }}
+        nodes {{ productName price priceDiscountRate offerLink commissionRate imageUrl }}
       }}
     }}
     """
@@ -255,6 +256,7 @@ def resolve_shopee_offer(
         comision_pct=comision_pct,
         link_propio=link_propio,
         precio_previo=_precio_previo_derivado(precio, pct),
+        imagen_url=nodo.get("imageUrl"),
     )
 
 
