@@ -139,3 +139,36 @@ def test_shopee_min_commission_pct_malformed_falls_back_to_default(monkeypatch):
     cfg = config.load_config()
 
     assert cfg["shopee_min_commission_pct"] == Decimal("6")
+
+
+def test_telegram_bot_token_read_from_env(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["telegram_bot_token"] == "123:ABC"
+
+
+def test_bot_allowed_users_parsed_as_int_set(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("BOT_ALLOWED_USERS", "111, 222")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["bot_allowed_users"] == {111, 222}
+
+
+def test_bot_allowed_users_absent_is_empty_set(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("BOT_ALLOWED_USERS", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["bot_allowed_users"] == set()

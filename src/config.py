@@ -3,6 +3,8 @@ from decimal import Decimal, InvalidOperation
 
 from dotenv import load_dotenv
 
+from .bot_access import parse_allowed_users
+
 
 def _maybe_int(raw):
     """Coerce a numeric string (optionally leading '-') to int; else return as-is.
@@ -58,4 +60,6 @@ def load_config() -> dict:
         "ml_matt_word": os.getenv("ML_MATT_WORD"),
         "ml_matt_tool": os.getenv("ML_MATT_TOOL"),
         "shopee_min_commission_pct": _maybe_decimal(os.getenv("SHOPEE_MIN_COMMISSION_PCT"), "6"),
+        "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN"),
+        "bot_allowed_users": parse_allowed_users(os.getenv("BOT_ALLOWED_USERS")),
     }
