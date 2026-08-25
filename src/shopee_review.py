@@ -70,7 +70,7 @@ def _build_post_propio(offer: ShopeeOffer, extra_link: str | None, hook: str) ->
         shop_id=0,
         name=offer.titulo,
         price_final=offer.precio,
-        image_url="",
+        image_url=offer.imagen_url or "",
         price_original=offer.precio_previo,
         affiliate_link=offer.link_propio,
     )

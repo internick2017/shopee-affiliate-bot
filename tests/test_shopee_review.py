@@ -2,6 +2,8 @@ import asyncio
 import json
 from decimal import Decimal
 
+import src.shopee_review as shopee_review
+from src.shopee_resolver import ShopeeOffer
 from src.shopee_review import (
     DEFAULT_MARKER,
     DESCARTADO_POR_COMISION,
@@ -469,3 +471,27 @@ def test_auto_post_dos_links_uno_sin_descuento_no_dispara_descarte():
     # tiene que caer al reenvio marcado de siempre (None), no descartarse del todo.
     assert msg is None
     assert msg is not DESCARTADO_POR_COMISION
+
+
+def test_build_post_propio_pasa_imagen_al_product(monkeypatch):
+    captured = {}
+    original_build_post = shopee_review.build_post
+
+    def spy_build_post(product, hook, extra_lines=()):
+        captured["product"] = product
+        return original_build_post(product, hook, extra_lines=extra_lines)
+
+    monkeypatch.setattr(shopee_review, "build_post", spy_build_post)
+
+    offer = ShopeeOffer(
+        titulo="Produto Teste",
+        precio=Decimal("10.00"),
+        descuento_pct=20,
+        comision_pct=Decimal("8"),
+        link_propio="https://s.shopee.com.br/propio",
+        imagen_url="https://cf.shopee.com.br/file/real123",
+    )
+
+    shopee_review._build_post_propio(offer, None, "Hook de teste")
+
+    assert captured["product"].image_url == "https://cf.shopee.com.br/file/real123"
