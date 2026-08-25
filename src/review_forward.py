@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Firmas de los canales fuente: no se republican en los canales de Lanny. Crowman
 # firma con "Grupos de promos" + su link; IAchados firma con su nombre al pie; GIRO DE
-# OFERTAS firma con "Todas as ofertas reunidas aqui" + link a su propio canal de Telegram.
+# OFERTAS firma con "Todas as ofertas reunidas aqui" + link a su propio canal de Telegram
+# y además rellena cada oferta con 2 frases de urgencia genéricas; Promocasinha cierra
+# cada mensaje con "Promoção por tempo limitado." (verificado: 50/50 mensajes reales,
+# 2026-08-01). Ninguna de las dos frases de relleno identifica al canal por nombre, pero
+# es ruido de la fuente que no debería llegar al canal de revisión de Nick.
 # Fuente única: amazon_retagger importa esta misma tupla (antes tenía su propia copia,
 # que había que acordarse de mantener en sincronía).
 #
@@ -32,6 +36,9 @@ FOOTER_MARKERS = (
     " iachados",
     "todas as ofertas reunidas aqui",
     "girodeofertas",
+    "promoção por tempo limitado",
+    "essa oferta pode esgotar a qualquer momento",
+    "aproveite antes que acabe",
 )
 
 

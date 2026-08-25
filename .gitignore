@@ -25,6 +25,8 @@ venv/
 *.log
 observations*.jsonl
 mensajes_*.txt
+diagnostico_*_out.txt
+fotos_*/
 
 # Scratch de orquestación SDD
 .superpowers/

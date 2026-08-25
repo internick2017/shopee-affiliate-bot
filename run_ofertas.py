@@ -17,6 +17,7 @@ Uso:
 Requiere AMAZON_TAG en el .env porque el handler de Amazon es el que monetiza; sin
 eso no arranca.
 """
+
 import asyncio
 import logging
 import sys
@@ -25,11 +26,16 @@ from src.amazon_pipeline import AmazonPipeline
 from src.channel_poster import ChannelPoster
 from src.config import load_config
 from src.dedup_store import DedupStore
+from src.image_watermark import strip_watermark_from_media
 from src.mercadolivre_review import MercadoLivreReviewPipeline
 from src.offer_pipeline import OfferPipeline
 from src.post_builder import HookBank
 from src.shopee_review import ShopeeReviewPipeline
 from src.telegram_listener import TelethonConfig, TelethonListener
+
+# Única fuente conocida hoy que pega un watermark de marca en sus fotos (verificado
+# 2026-08-01, ver src/image_watermark.py). Si mañana aparece otra, sumarla acá.
+_WATERMARKED_SOURCES = ("promocasinha",)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("ofertas-bot")
@@ -76,7 +82,8 @@ async def _resolve_platform_channel(listener, configured, fallback, env_var, pla
     if not configured:
         logger.warning(
             "%s no está seteado: las ofertas de %s irán al canal principal.",
-            env_var, platform,
+            env_var,
+            platform,
         )
         return fallback
 
@@ -84,7 +91,8 @@ async def _resolve_platform_channel(listener, configured, fallback, env_var, pla
     if target is None:
         logger.error(
             "No se encontró ningún canal cuyo nombre contenga %r. Revisa %s.",
-            configured, env_var,
+            configured,
+            env_var,
         )
         return _UNRESOLVED
     return target
@@ -114,6 +122,12 @@ async def main() -> None:
         pipeline = pipeline_holder.get("pipeline")
         if pipeline is None:
             return
+        if (
+            photo is not None
+            and chat_title
+            and any(source in chat_title.lower() for source in _WATERMARKED_SOURCES)
+        ):
+            photo = await strip_watermark_from_media(listener._client, photo)
         await pipeline.handle(text, chat_title, photo=photo)
 
     tel_cfg = TelethonConfig(
@@ -184,8 +198,13 @@ async def main() -> None:
     logger.info(
         "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s "
         "shopee_channel=%s ml_channel=%s dedup_db=%s (observe=%s)",
-        cfg["amazon_tag"], cfg["source_chats"], amazon_target, shopee_target,
-        ml_target, cfg["dedup_db"], observe,
+        cfg["amazon_tag"],
+        cfg["source_chats"],
+        amazon_target,
+        shopee_target,
+        ml_target,
+        cfg["dedup_db"],
+        observe,
     )
     logger.info("Escuchando Telegram... (observe=%s)", observe)
     await listener.run_until_disconnected()

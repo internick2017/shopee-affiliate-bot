@@ -97,6 +97,38 @@ def test_footer_of_giro_de_ofertas_is_stripped():
     assert "girodeofertas" not in msg
 
 
+def test_footer_of_promocasinha_is_stripped():
+    """Promocasinha cierra CADA mensaje con "Promoção por tempo limitado." (verificado
+    en 50/50 mensajes reales, 2026-08-01); sin este marcador se cuela tal cual al
+    reenvío manual de Shopee/ML."""
+    text = (
+        "Smartphone Samsung Galaxy A36\n"
+        "Por: R$ 906,75\n"
+        "https://s.shopee.com.br/2LXA8fsoIy\n\n"
+        "Promoção por tempo limitado."
+    )
+    msg = build_review_message(text, SHOPEE_LINK_RE, "[SH]", platform="shopee")
+    assert "Smartphone Samsung Galaxy A36" in msg
+    assert "Promoção por tempo limitado" not in msg
+
+
+def test_giro_de_ofertas_urgency_filler_is_stripped():
+    """GIRO rellena cada oferta con 2 frases de urgencia genéricas además de su firma
+    (ver test_footer_of_giro_de_ofertas_is_stripped); tampoco deberían llegar al
+    reenvío manual."""
+    text = (
+        "⚠️ Essa oferta pode esgotar a qualquer momento!\n"
+        "Bombom Ferrero Rocher\n"
+        "💰 Por R$23\n"
+        "🛒 Aproveite antes que acabe:\n"
+        "https://s.shopee.com.br/6fg0pPNtiC"
+    )
+    msg = build_review_message(text, SHOPEE_LINK_RE, "[SH]", platform="shopee")
+    assert "Bombom Ferrero Rocher" in msg
+    assert "esgotar a qualquer momento" not in msg
+    assert "Aproveite antes que acabe" not in msg
+
+
 def test_block_without_links_is_kept_as_context():
     text = "⚡ OFERTAS DA SEMANA ⚡\n\nFone\nhttps://meli.la/AAA"
     msg = build_review_message(text, MERCADOLIVRE_LINK_RE, "[ML]", platform="ml")
