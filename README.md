@@ -83,7 +83,9 @@ python run_ofertas.py            # el bot
 python run_ofertas.py --observe  # diagnóstico: loguea cada mensaje y su chat_id, sin postear
 ```
 
-En Windows: `iniciar-bot-ofertas.bat`.
+En Windows, sin ventana visible: `iniciar-bot-ofertas-oculto.vbs` (o
+`iniciar-todo-oculto.vbs` para arrancar tambien el bot generador de posts).
+Para pararlos: `detener-bots-ocultos.vbs`.
 
 ## Antes de agregar un canal fuente
 

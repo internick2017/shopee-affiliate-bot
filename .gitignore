@@ -30,3 +30,9 @@ fotos_*/
 
 # Scratch de orquestación SDD
 .superpowers/
+
+# Scripts y datos de diagnostico puntual (locales, no forman parte del bot)
+diagnostico_*.py
+fetch_fotos.py
+links_*.txt
+conteo_*.txt
