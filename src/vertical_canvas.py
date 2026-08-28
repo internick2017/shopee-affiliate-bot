@@ -35,24 +35,43 @@ _MARGEN_SUPERIOR = 0.15
 _MARGEN_INFERIOR = 0.22
 # Cuánto del ancho puede ocupar el producto como máximo.
 _ANCHO_MAX_PRODUCTO = 1.0
-_DESENFOQUE = 42
-_OSCURECIDO = 0.55
-# Alto del degradado que funde la foto con el fondo, en píxeles.
-_FUNDIDO = 90
+_DESENFOQUE = 110
+_OSCURECIDO = 0.70
+# Alto del degradado que funde la foto con el fondo, en píxeles. Corto (90) deja
+# ver el corte; 190 da una transición que no se lee como borde.
+_FUNDIDO = 190
 
 
 def _fondo(im, ancho: int, alto: int):
-    """Recorte de `im` que CUBRE ancho x alto, desenfocado y oscurecido."""
-    from PIL import Image, ImageEnhance, ImageFilter
+    """Fondo del lienzo: la foto extendida por espejo hasta cubrir ancho x alto,
+    después desenfocada, desaturada y oscurecida.
+
+    El espejo en vez del recorte central ampliado: ampliar el centro de la foto
+    hasta cubrir 1920 de alto agranda objetos concretos y reconocibles, y el
+    resultado se lee como "otra foto atrás". El espejo continúa el borde, que es
+    justo la zona que toca el producto, así que el relleno queda como una
+    prolongación de la misma superficie."""
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
     w, h = im.size
-    escala = max(ancho / w, alto / h)
-    grande = im.resize((max(1, round(w * escala)), max(1, round(h * escala))), Image.LANCZOS)
-    gw, gh = grande.size
-    izq, arriba = (gw - ancho) // 2, (gh - alto) // 2
-    recorte = grande.crop((izq, arriba, izq + ancho, arriba + alto))
-    borroso = recorte.filter(ImageFilter.GaussianBlur(_DESENFOQUE))
-    return ImageEnhance.Brightness(borroso).enhance(_OSCURECIDO)
+    escala = ancho / w
+    base = im.resize((ancho, max(1, round(h * escala))), Image.LANCZOS)
+    bw, bh = base.size
+    lienzo = Image.new("RGB", (ancho, alto))
+    # Mosaico espejado vertical: la fila i alterna original / volteada.
+    y = (alto - bh) // 2
+    volteada = ImageOps.flip(base)
+    fila = 0
+    while y > 0:
+        y -= bh
+        fila += 1
+    while y < alto:
+        lienzo.paste(volteada if fila % 2 else base, (0, y))
+        y += bh
+        fila += 1
+    borroso = lienzo.filter(ImageFilter.GaussianBlur(_DESENFOQUE))
+    apagado = ImageEnhance.Color(borroso).enhance(0.6)
+    return ImageEnhance.Brightness(apagado).enhance(_OSCURECIDO)
 
 
 def _medidas_producto(w: int, h: int, ancho: int, alto: int) -> tuple[int, int, int, int]:
