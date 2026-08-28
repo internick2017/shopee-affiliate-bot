@@ -20,6 +20,12 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
+from src.bot_comandos import (
+    comandos_para_telegram,
+    parece_comando,
+    texto_ayuda,
+    texto_desconocido,
+)
 from src.bot_mensajes import texto_grabados, texto_idea, texto_tendencia, texto_ventas
 from src.config import load_config
 from src.post_builder import HookBank
@@ -371,9 +377,18 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(_MSG_SIN_ACCESO)
         return
 
+    text = update.message.text or ""
+    # "/ ventas 90" (con espacio) llega aca y no al handler de comandos: Telegram no
+    # lo marca como comando. Sin esto, el bot contesta sobre links de Shopee a alguien
+    # que solo se equivoco tipeando.
+    if parece_comando(text):
+        await update.message.reply_text(
+            texto_desconocido(text), parse_mode=ParseMode.HTML
+        )
+        return
+
     user_credentials = context.bot_data["credentials_store"].get(user.id)
 
-    text = update.message.text or ""
     reply = generate_post_reply(
         text,
         cfg["shopee_app_id"],
@@ -397,6 +412,36 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(reply.caption)
 
 
+async def _handle_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/ayuda` y `/start` — la misma lista que muestra el menu de Telegram."""
+    if _check_access(update, context) is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+    await update.message.reply_text(
+        texto_ayuda(), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+    )
+
+
+async def _handle_desconocido(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cualquier /comando que no exista. Va ULTIMO en el registro: los handlers se
+    prueban en orden y este matchea todos los comandos."""
+    if _check_access(update, context) is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+    await update.message.reply_text(
+        texto_desconocido(update.message.text or ""), parse_mode=ParseMode.HTML
+    )
+
+
+async def _publicar_menu(application: Application) -> None:
+    """Deja la lista de comandos en Telegram, que es lo que se despliega al escribir
+    "/". Si falla, el bot igual arranca: es comodidad, no funcionalidad."""
+    try:
+        await application.bot.set_my_commands(comandos_para_telegram())
+    except Exception:  # noqa: BLE001 - no vale tumbar el bot por el menu
+        logger.warning("No pude publicar el menu de comandos en Telegram.", exc_info=True)
+
+
 def main() -> None:
     cfg = load_config()
 
@@ -411,13 +456,16 @@ def main() -> None:
             "BOT_ALLOWED_USERS está vacío: nadie va a poder usar el bot hasta que lo configures."
         )
 
-    application = Application.builder().token(cfg["telegram_bot_token"]).build()
+    application = (
+        Application.builder().token(cfg["telegram_bot_token"]).post_init(_publicar_menu).build()
+    )
     application.bot_data["cfg"] = cfg
     application.bot_data["hooks"] = HookBank.from_file(cfg["hooks_file"])
     application.bot_data["credentials_store"] = UserCredentialsStore(cfg["user_credentials_db"])
     application.bot_data["trend_store"] = TrendStore(cfg["trend_db"])
     application.bot_data["grabados_store"] = GrabadosStore(cfg["grabados_db"])
 
+    application.add_handler(CommandHandler(["ayuda", "start", "help"], _handle_ayuda))
     application.add_handler(CommandHandler("registrar_shopee", _handle_registrar_shopee))
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
     application.add_handler(CommandHandler("video", _handle_video))
@@ -435,6 +483,8 @@ def main() -> None:
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, _handle_message)
     )
+    # Ultimo de todos: si llego hasta aca, el comando no existe.
+    application.add_handler(MessageHandler(filters.COMMAND, _handle_desconocido))
 
     logger.info("Bot generador de posts listo. allowed_users=%s", cfg["bot_allowed_users"])
     application.run_polling(allowed_updates=Update.ALL_TYPES)
