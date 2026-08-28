@@ -72,6 +72,15 @@ NOMBRES: dict[int, str] = {
     100535: "Áudio e Fones",
     100010: "Eletrodomésticos",
     100532: "Calçados",
+    # Verificadas en una segunda pasada (2026-08-28) mirando que trae cada una:
+    # eran las de muestra chica en el sampleo inicial, no las obvias.
+    100016: "Bolsas Femininas",
+    100533: "Mochilas e Carteiras",
+    100534: "Relógios",
+    100633: "Moda Infantil",
+    100012: "Chinelos e Palmilhas",
+    100015: "Malas e Viagem",
+    100643: "Livros",
 }
 
 # Alias que la gente escribe -> categoría de nivel 1 que los contiene.
@@ -98,6 +107,17 @@ CATEGORIAS: dict[str, int] = {
     "audio": 100535,
     "eletrodomesticos": 100010,
     "calcados": 100532,
+    "bolsas": 100016,
+    "mochilas": 100533,
+    "carteiras": 100533,
+    "relogios": 100534,
+    "infantil": 100633,
+    "criancas": 100633,
+    "chinelos": 100012,
+    "palmilhas": 100012,
+    "viagem": 100015,
+    "malas": 100015,
+    "livros": 100643,
 }
 
 _CAMPOS = (
@@ -110,6 +130,7 @@ _CAMPOS = (
 class Idea:
     """Un candidato a grabar, ya con su link monetizado."""
 
+    item_id: int
     titulo: str
     precio: Decimal
     ventas: int
@@ -234,7 +255,12 @@ def _a_idea(nodo: dict) -> Idea | None:
         return None
     if not nodo.get("productName") or not nodo.get("offerLink"):
         return None
+    try:
+        item_id = int(nodo.get("itemId"))
+    except (TypeError, ValueError):
+        return None
     return Idea(
+        item_id=item_id,
         titulo=nodo["productName"],
         precio=precio,
         ventas=ventas,
@@ -257,9 +283,14 @@ def buscar_ideas(
     *,
     cuantas: int = 5,
     candidatos: int = 40,
+    excluir: set[int] | None = None,
     http_post: Callable[..., object] | None = None,
 ) -> list[Idea]:
     """Top `cuantas` ideas ordenadas por puntaje. Lista vacía ante cualquier fallo.
+
+    `excluir`: item_ids a descartar (los ya grabados). Se filtra ANTES de aplicar
+    la variedad, para que un producto descartado no gaste el cupo de su firma y
+    deje afuera a otro parecido que si sirve.
 
     Se piden `candidatos` (más de los que se devuelven) porque la API ordena por
     ventas y el reordenamiento por puntaje solo tiene sentido sobre un pozo amplio:
@@ -282,5 +313,7 @@ def buscar_ideas(
         return []
     nodos = ((data.get("productOfferV2") or {}).get("nodes")) or []
     ideas = [i for i in (_a_idea(n) for n in nodos) if i is not None]
+    if excluir:
+        ideas = [i for i in ideas if i.item_id not in excluir]
     ideas.sort(key=lambda i: i.puntaje, reverse=True)
     return _variar(ideas, cuantas)
