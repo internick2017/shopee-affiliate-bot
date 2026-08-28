@@ -51,9 +51,7 @@ Qué productos conviene grabar.
 | `/ideas beleza` | Los 5 mejores de esa categoría |
 | `/ideas porta frios` | Busca esas palabras exactas |
 
-**Categorías:** casa, cozinha, limpeza, beleza, bebe, brinquedos, pet, saude,
-suplementos, alimentos, eletrodomesticos, moda, calcados, acessorios, celular,
-informatica, audio, esportes, automotivo, papelaria.
+**Categorías:** acessorios, alimentos, audio, automotivo, bebe, beleza, bolsas, brinquedos, calcados, carteiras, casa, celular, chinelos, cozinha, criancas, eletrodomesticos, esportes, infantil, informatica, limpeza, livros, malas, mochilas, moda, palmilhas, papelaria, pet, relogios, saude, suplementos, viagem.
 
 Si lo que buscás no está en la lista, escribilo igual y lo busca por palabra.
 
@@ -82,6 +80,18 @@ está despegando esta semana, que es el mejor momento para grabarlo.
 ```
 
 El número son los días que mira para atrás. Sin número, mira 7.
+
+### `/grabados`
+
+Los productos que ya usaste para grabar. El bot los anota solo cuando pedís
+`/video`, y desde ese momento no vuelven a aparecer en `/ideas` ni en
+`/tendencia`, para que no repitas sin querer.
+
+Si querés volver a grabar uno, copiá su número y mandá:
+
+```
+/olvidar_video 12345678
+```
 
 ### `/ventas`
 

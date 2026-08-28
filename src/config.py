@@ -56,6 +56,7 @@ def load_config() -> dict:
         "source_chats": _chats(os.getenv("SOURCE_CHATS", "")),
         "dedup_db": os.getenv("DEDUP_DB", "dedup.db"),
         "trend_db": os.getenv("TREND_DB", "tendencias.db"),
+        "grabados_db": os.getenv("GRABADOS_DB", "grabados.db"),
         "user_credentials_db": os.getenv("USER_CREDENTIALS_DB", "user_credentials.db"),
         "hooks_file": os.getenv("HOOKS_FILE", "hooks.txt"),
         "amazon_tag": os.getenv("AMAZON_TAG"),

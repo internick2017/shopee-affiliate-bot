@@ -162,6 +162,13 @@ def _resolve_redirect(
         return None
 
 
+def _a_item_id(valor) -> int | None:
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
 def _a_decimal(valor) -> Decimal | None:
     """`Decimal(str(valor))`, nunca `Decimal(valor)` directo sobre un float."""
     if valor is None:
@@ -196,6 +203,10 @@ class ShopeeOffer:
     link_propio: str
     precio_previo: Decimal | None = None
     imagen_url: str | None = None
+    # Identidad estable del producto en Shopee. El `offerLink` NO sirve como clave:
+    # es un shortlink de tracking y puede cambiar entre llamadas para el mismo
+    # producto. Lo usa `grabados_store` para no ofrecer dos veces lo mismo.
+    item_id: int | None = None
 
     @property
     def tiene_descuento(self) -> bool:
@@ -257,6 +268,7 @@ def resolve_shopee_offer(
         link_propio=link_propio,
         precio_previo=_precio_previo_derivado(precio, pct),
         imagen_url=nodo.get("imageUrl"),
+        item_id=_a_item_id(nodo.get("itemId")),
     )
 
 

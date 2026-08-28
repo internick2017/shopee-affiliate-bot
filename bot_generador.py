@@ -25,6 +25,7 @@ from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.sales_report import resumen_ventas
+from src.grabados_store import GrabadosStore
 from src.trend_store import TrendStore
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
@@ -136,6 +137,13 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # El link se guarda y se muestra: entre pedir la referencia y volver con el
     # video generado pasan minutos en otra app, y sin esto el link se pierde.
+    # Se marca al pedir la referencia y no al publicar: es el unico paso que
+    # pasa siempre por el bot. Pedir que el usuario avise al publicar no funciona.
+    if ref.item_id:
+        context.bot_data["grabados_store"].marcar(
+            ref.item_id, titulo=ref.caption or "", user_id=user.id
+        )
+
     if ref.link:
         context.bot_data.setdefault("ultimo_link", {})[user.id] = ref.link
         modo = "vertical nativo (Flow)" if nativo else "para reencuadrar despues"
@@ -143,6 +151,50 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"Prompt {modo}.\n\nLink del producto:\n{ref.link}",
             disable_web_page_preview=True,
         )
+
+
+async def _handle_grabados(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/grabados` — que productos ya se usaron para video, y por lo tanto no
+    vuelven a aparecer en /ideas ni /tendencia."""
+    if _check_access(update, context) is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    store = context.bot_data["grabados_store"]
+    total = store.total()
+    if not total:
+        await update.message.reply_text(
+            "Todavia no grabaste ningun producto. Cuando pidas /video, lo anoto aca."
+        )
+        return
+
+    lineas = [f"<b>{total} productos ya grabados</b>", ""]
+    for g in store.ultimos(10):
+        lineas.append(f"{g.titulo[:60]}")
+        lineas.append(f"  hace {g.dias_atras:.0f} dias - id {g.item_id}")
+    lineas.append("")
+    lineas.append("<i>Para volver a grabar uno: /olvidar_video (id)</i>")
+    await update.message.reply_text(
+        "\n".join(lineas), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+    )
+
+
+async def _handle_olvidar_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/olvidar_video <item_id>` — permite volver a ofrecer un producto."""
+    if _check_access(update, context) is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text(
+            "Usalo asi: /olvidar_video 12345678\nEl numero sale de /grabados."
+        )
+        return
+
+    if context.bot_data["grabados_store"].olvidar(int(context.args[0])):
+        await update.message.reply_text("Listo, ese producto vuelve a aparecer en /ideas.")
+    else:
+        await update.message.reply_text("Ese id no estaba en la lista de grabados.")
 
 
 async def _handle_tendencia(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -168,7 +220,10 @@ async def _handle_tendencia(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    tendencias = store.tendencias(ventana_dias=ventana)[:5]
+    tendencias = store.tendencias(
+        ventana_dias=ventana,
+        excluir=context.bot_data["grabados_store"].grabados_todos(),
+    )[:5]
     if not tendencias:
         await update.message.reply_text(
             f"Ningun producto crecio lo suficiente en los ultimos {ventana} dias."
@@ -275,7 +330,8 @@ async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cfg["shopee_app_id"],
         cfg["shopee_secret"],
     )
-    ideas = buscar_ideas(consulta, app_id, secret)
+    ideas = buscar_ideas(consulta, app_id, secret,
+                         excluir=context.bot_data["grabados_store"].grabados_todos())
     if not ideas:
         await update.message.reply_text(_MSG_IDEAS_VACIO)
         return
@@ -397,6 +453,7 @@ def main() -> None:
     application.bot_data["hooks"] = HookBank.from_file(cfg["hooks_file"])
     application.bot_data["credentials_store"] = UserCredentialsStore(cfg["user_credentials_db"])
     application.bot_data["trend_store"] = TrendStore(cfg["trend_db"])
+    application.bot_data["grabados_store"] = GrabadosStore(cfg["grabados_db"])
 
     application.add_handler(CommandHandler("registrar_shopee", _handle_registrar_shopee))
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
@@ -404,6 +461,8 @@ def main() -> None:
     application.add_handler(CommandHandler("ideas", _handle_ideas))
     application.add_handler(CommandHandler("ventas", _handle_ventas))
     application.add_handler(CommandHandler("tendencia", _handle_tendencia))
+    application.add_handler(CommandHandler("grabados", _handle_grabados))
+    application.add_handler(CommandHandler("olvidar_video", _handle_olvidar_video))
     application.add_handler(
         MessageHandler(
             (filters.VIDEO | filters.Document.VIDEO) & filters.ChatType.PRIVATE,

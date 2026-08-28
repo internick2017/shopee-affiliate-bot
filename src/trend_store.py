@@ -99,6 +99,7 @@ class TrendStore:
         *,
         ventana_dias: int = 7,
         minimo_nuevas: int = 30,
+        excluir: set[int] | None = None,
         now: float | None = None,
     ) -> list[Tendencia]:
         """Productos que crecieron, ordenados por crecimiento relativo.
@@ -131,7 +132,7 @@ class TrendStore:
                 ventas_ahora=int(ahora or 0), dias=dias, precio=float(precio or 0),
                 comision_pct=float(com or 0), link=link or "",
             )
-            if t.nuevas >= minimo_nuevas:
+            if t.nuevas >= minimo_nuevas and not (excluir and t.item_id in excluir):
                 salida.append(t)
         salida.sort(key=lambda x: x.crecimiento_pct, reverse=True)
         return salida

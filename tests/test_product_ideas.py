@@ -186,3 +186,32 @@ def test_el_mejor_puntaje_sigue_primero():
 def test_retorno_por_venta_es_precio_por_comision():
     assert retorno_por_venta(50.0, 10.0) == 5.0
     assert retorno_por_venta(0.0, 99.0) == 0.0
+
+
+def test_excluye_los_ya_grabados():
+    """Con 33 videos al mes, repetir un producto sin querer duele."""
+    nodos = [_nodo("Alfa", comision="0.25"), _nodo("Beta", comision="0.20")]
+    nodos[0]["itemId"] = 111
+    nodos[1]["itemId"] = 222
+    r = buscar_ideas("limpeza", "a", "s", excluir={111}, http_post=_post(nodos))
+    assert [i.titulo for i in r] == ["Beta"]
+
+
+def test_el_excluido_no_gasta_el_cupo_de_su_firma():
+    """Se filtra ANTES de la variedad: si el descartado consumiera la firma,
+    dejaria afuera al parecido que si sirve."""
+    nodos = [_nodo("Percarbonato grabado", comision="0.25"),
+             _nodo("Percarbonato disponible", comision="0.20")]
+    nodos[0]["itemId"] = 111
+    nodos[1]["itemId"] = 222
+    r = buscar_ideas("limpeza", "a", "s", excluir={111}, http_post=_post(nodos))
+    assert [i.titulo for i in r] == ["Percarbonato disponible"]
+
+
+def test_todo_alias_tiene_nombre_y_viceversa():
+    """Un alias sin nombre deja al bot diciendo 'Buscando en None'; un nombre sin
+    alias es una categoria mapeada que nadie puede pedir."""
+    from src.product_ideas import NOMBRES
+
+    assert {c for c in CATEGORIAS.values() if c not in NOMBRES} == set()
+    assert {c for c in NOMBRES if c not in CATEGORIAS.values()} == set()

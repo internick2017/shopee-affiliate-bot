@@ -93,6 +93,8 @@ En chat privado, un usuario de `BOT_ALLOWED_USERS` puede:
 | `/ideas <categoria o palabra>` | top 5 productos VARIADOS para grabar, ranqueados por retorno por venta, ventas, rating y precio |
 | `/ventas [dias]` | que se vendio de verdad: comision, banda de precio y los que mas dejaron (default 30 dias) |
 | `/tendencia [dias]` | que esta despegando AHORA (necesita 2+ dias de muestreo, ver abajo) |
+| `/grabados` | que productos ya se usaron para video (no vuelven a salir en /ideas ni /tendencia) |
+| `/olvidar_video <id>` | permite volver a ofrecer un producto ya grabado |
 | `/video <link>` | la imagen 9:16 de referencia + el prompt + el link del producto |
 | `/video <link> nativo` | igual, pero con el prompt para generadores que ya producen 9:16 (Google Flow) |
 | un archivo de video | el mismo video en 1080x1920, en sus dos versiones: RECORTE (pantalla completa, corta los costados) y MARCO (video entero con fondo difuminado) |

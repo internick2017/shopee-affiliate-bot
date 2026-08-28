@@ -173,6 +173,8 @@ class VideoReference:
     caption: str | None = None
     prompt: str | None = None
     link: str | None = None
+    # Identidad del producto, para anotarlo como grabado y no volver a ofrecerlo.
+    item_id: int | None = None
     filename: str | None = None
     error: str | None = None
 
@@ -224,6 +226,7 @@ def generate_video_reference(
         caption=offer.titulo,
         prompt=_PROMPT_VIDEO_NATIVO if nativo else _PROMPT_VIDEO,
         link=offer.link_propio,
+        item_id=offer.item_id,
         filename="referencia-9x16.jpg",
     )
 
