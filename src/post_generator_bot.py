@@ -78,33 +78,60 @@ _ERROR_SIN_FOTO = (
     "Pude leer el producto pero no conseguí bajar la foto de Shopee. Probá de nuevo en un rato."
 )
 
-# Prompt para el generador de video. La imagen que lo acompaña YA es 9:16, así que
-# no hay que pelear por el formato — el error clásico era pedir 9:16 por texto con
-# una imagen cuadrada, y ahí el modelo rellenaba el alto faltante inventando un
-# mockup de celular. Acá solo se pide animar lo que ya está encuadrado.
+# Prompt para el generador de video. Dos cosas que este prompt tiene que lograr y
+# que se aprendieron probando, no razonando:
+#
+# 1. NO pelear por el formato 9:16. El generador lo ignora igual (el aspect ratio
+#    es un parametro de generacion que la app de Gemini no expone), y la salida se
+#    reencuadra despues con `video_vertical`. Pedirlo por texto solo confundia al
+#    modelo, que llegaba a componer un mockup de celular para rellenar el alto.
+#
+# 2. SI exigir que el producto quede CENTRADO y quieto. Esto es nuevo: el modo de
+#    reencuadre que quedo mejor es el recorte, que se queda solo con la franja
+#    central del video horizontal. Todo lo que se vaya a los costados se pierde,
+#    asi que el encuadre del video generado tiene que anticipar ese recorte.
 _PROMPT_VIDEO = """Anime esta imagem de referência em um vídeo publicitário de 10 segundos.
 
-Mantenha EXATAMENTE o mesmo enquadramento vertical da imagem, preenchendo todo o quadro.
-O produto deve permanecer idêntico: mesmo formato, cores, materiais, proporções e detalhes.
+ENQUADRAMENTO - O MAIS IMPORTANTE:
+O produto deve ficar SEMPRE CENTRALIZADO, no meio exato do quadro, do primeiro ao
+último segundo. O vídeo vai ser recortado depois na faixa central, então tudo que
+ficar nas laterais será perdido.
+- Mantenha o produto no centro em todos os momentos.
+- NÃO mova o produto para a esquerda nem para a direita.
+- NÃO use movimentos laterais de câmera, travelling nem panorâmica.
+- Use apenas zoom suave para dentro ou para fora, sempre centrado no produto.
+- NÃO coloque nada importante perto das bordas esquerda e direita.
+- O produto deve ocupar boa parte da altura do quadro.
 
-0-3s: o produto em destaque.
-3-7s: o produto em uso ou seus detalhes principais.
-7-10s: enquadramento final claro do produto.
+PRODUTO:
+Idêntico ao da imagem: mesmo formato, cores, materiais, proporções e detalhes.
+REMOVA todo o texto, setas, selos e marcas d'água que apareçam na imagem de
+referência. O produto deve aparecer limpo, sem nenhuma palavra sobre ele.
 
-Movimentos suaves de câmera e zoom leve. Fotorrealista, iluminação profissional.
+RITMO:
+0-3s: o produto em destaque, centralizado.
+3-7s: detalhes do produto ou o produto em uso, sempre centralizado.
+7-10s: enquadramento final claro do produto, centralizado.
 
+Fotorrealista, iluminação profissional, movimento natural.
+
+NÃO adicione texto novo, logotipos, pessoas, animais nem objetos novos.
 NÃO mostre telefone, moldura, tela ou interface de aplicativo.
-NÃO adicione texto, logotipos, pessoas, animais nem objetos novos.
 NÃO mostre crianças ou bebês."""
 
 
 @dataclass
 class VideoReference:
     """Imagen 9:16 lista para un generador de video, más el prompt sugerido.
-    `error` presente = el resto ausente, igual que `BotReply`."""
+    `error` presente = el resto ausente, igual que `BotReply`.
+
+    `caption` y `prompt` van separados porque el caption de Telegram corta en 1024
+    caracteres y el prompt solo pasa de eso: mandarlos juntos truncaba justo las
+    instrucciones del final, que son las restricciones."""
 
     image_bytes: bytes | None = None
     caption: str | None = None
+    prompt: str | None = None
     filename: str | None = None
     error: str | None = None
 
@@ -149,7 +176,8 @@ def generate_video_reference(
 
     return VideoReference(
         image_bytes=build_vertical_canvas(raw),
-        caption=f"{offer.titulo}\n\n{_PROMPT_VIDEO}",
+        caption=offer.titulo,
+        prompt=_PROMPT_VIDEO,
         filename="referencia-9x16.jpg",
     )
 

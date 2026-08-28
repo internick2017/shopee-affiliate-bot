@@ -193,11 +193,26 @@ def test_referencia_devuelve_imagen_vertical():
     assert Image.open(io.BytesIO(ref.image_bytes)).size == (1080, 1920)
 
 
-def test_referencia_incluye_titulo_y_prompt():
+def test_referencia_separa_titulo_y_prompt():
+    """Van separados porque juntos superan el tope de 1024 del caption."""
     ref = _generar_referencia("https://s.shopee.com.br/abc123")
-    assert "Kit Panos de Limpeza" in ref.caption
-    assert "10 segundos" in ref.caption
-    assert "NÃO mostre telefone" in ref.caption
+    assert ref.caption == "Kit Panos de Limpeza"
+    assert "10 segundos" in ref.prompt
+    assert "NÃO mostre telefone" in ref.prompt
+    assert len(ref.caption) <= 1024
+
+
+def test_prompt_exige_producto_centrado():
+    """El modo de reencuadre elegido recorta la franja central: lo que se va a
+    los costados se pierde, asi que el video generado tiene que anticiparlo."""
+    ref = _generar_referencia("https://s.shopee.com.br/abc123")
+    assert "CENTRALIZADO" in ref.prompt
+    assert "laterais" in ref.prompt or "lateral" in ref.prompt
+
+
+def test_prompt_pide_sacar_el_texto_de_la_foto():
+    ref = _generar_referencia("https://s.shopee.com.br/abc123")
+    assert "REMOVA todo o texto" in ref.prompt
 
 
 def test_referencia_sin_link_da_error():

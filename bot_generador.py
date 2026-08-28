@@ -122,6 +122,9 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         filename=ref.filename,
         caption=ref.caption[:1024],
     )
+    # El prompt va aparte: no entra en un caption (tope 1024) y suelto se copia
+    # de un toque en el celular.
+    await update.message.reply_text(ref.prompt)
 
 
 async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
