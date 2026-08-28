@@ -20,6 +20,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
+from src.bot_mensajes import texto_grabados, texto_idea, texto_tendencia, texto_ventas
 from src.config import load_config
 from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
@@ -168,14 +169,9 @@ async def _handle_grabados(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    lineas = [f"<b>{total} productos ya grabados</b>", ""]
-    for g in store.ultimos(10):
-        lineas.append(f"{g.titulo[:60]}")
-        lineas.append(f"  hace {g.dias_atras:.0f} dias - id {g.item_id}")
-    lineas.append("")
-    lineas.append("<i>Para volver a grabar uno: /olvidar_video (id)</i>")
     await update.message.reply_text(
-        "\n".join(lineas), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        texto_grabados(total, store.ultimos(10)),
+        parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )
 
 
@@ -231,17 +227,8 @@ async def _handle_tendencia(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     for n, x in enumerate(tendencias, 1):
-        texto = (
-            f"<b>{n}. {x.titulo[:80]}</b>\n"
-            f"+{x.nuevas} ventas en {x.dias:.0f} dias "
-            f"({x.por_dia:.0f}/dia, +{x.crecimiento_pct:.0f}%)\n"
-            f"{x.ventas_antes} -> {x.ventas_ahora} | R$ {x.precio:.2f} | "
-            f"{x.comision_pct:.0f}% comision\n"
-            f"{x.link}\n\n"
-            f"<i>Referencia de video: /video {x.link} nativo</i>"
-        )
         await update.message.reply_text(
-            texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True
+            texto_tendencia(n, x), parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
 
 
@@ -277,38 +264,8 @@ async def _handle_ventas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    lineas = [
-        f"<b>Ultimos {v.dias} dias</b>",
-        f"Comision: <b>R$ {v.comision:.2f}</b> en {v.completados} ventas",
-        f"Promedio por venta: R$ {v.por_venta:.2f}",
-    ]
-    if v.cancelados or v.pendientes:
-        lineas.append(f"({v.cancelados} canceladas, {v.pendientes} pendientes, no contadas)")
-
-    lineas.append("")
-    lineas.append("<b>Por banda de precio</b>")
-    for banda in v.bandas:
-        lineas.append(
-            f"{banda.etiqueta}: {banda.items} vendidos, "
-            f"R$ {banda.comision:.2f} (R$ {banda.por_item:.2f} c/u)"
-        )
-
-    if v.origenes:
-        lineas.append("")
-        lineas.append("<b>Por origen del click</b>")
-        for o in v.origenes:
-            lineas.append(
-                f"{o.etiqueta}: {o.items} vendidos, {o.tasa_pct:.1f}% real "
-                f"(R$ {o.comision:.2f})"
-            )
-
-    lineas.append("")
-    lineas.append("<b>Los que mas dejaron</b>")
-    for nombre, com in v.top:
-        lineas.append(f"R$ {com:.2f} - {nombre}")
-
     await update.message.reply_text(
-        "\n".join(lineas), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        texto_ventas(v), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )
 
 
@@ -346,15 +303,8 @@ async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     for n, idea in enumerate(ideas, 1):
-        texto = (
-            f"<b>{n}. {idea.titulo[:90]}</b>\n"
-            f"R$ {idea.precio} - {idea.ventas} vendidos - "
-            f"{idea.comision_pct:.0f}% comision - {idea.rating} estrellas\n"
-            f"{idea.link}\n\n"
-            f"<i>Referencia de video: /video {idea.link}</i>"
-        )
         await update.message.reply_text(
-            texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True
+            texto_idea(n, idea), parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
 
 
@@ -440,7 +390,11 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_photo(photo=reply.photo_url, caption=reply.caption)
     else:
         # Shopee no siempre trae imageUrl; degradar a solo texto en vez de fallar.
-        await update.message.reply_text(reply.caption, parse_mode=ParseMode.HTML)
+        # SIN parse_mode: el post de Lanny es texto plano con emojis, no tiene una
+        # sola etiqueta HTML. Pedirle a Telegram que lo parsee como HTML no aportaba
+        # nada y hacia que un titulo con "&" tumbara el mensaje entero. La rama de
+        # la foto, dos lineas arriba, siempre lo mando asi.
+        await update.message.reply_text(reply.caption)
 
 
 def main() -> None:
