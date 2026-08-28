@@ -151,6 +151,9 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             ref.item_id, titulo=ref.caption or "", user_id=user.id
         )
 
+    if ref.aviso:
+        await update.message.reply_text(ref.aviso, parse_mode=ParseMode.HTML)
+
     if ref.link:
         context.bot_data.setdefault("ultimo_link", {})[user.id] = ref.link
         modo = "vertical nativo (Flow)" if nativo else "para reencuadrar despues"
@@ -410,6 +413,10 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # nada y hacia que un titulo con "&" tumbara el mensaje entero. La rama de
         # la foto, dos lineas arriba, siempre lo mando asi.
         await update.message.reply_text(reply.caption)
+
+    # Aparte y al final: el post de arriba se copia tal cual, este aviso no.
+    if reply.aviso:
+        await update.message.reply_text(reply.aviso, parse_mode=ParseMode.HTML)
 
 
 async def _handle_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

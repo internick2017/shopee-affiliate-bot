@@ -15,7 +15,10 @@ Las etiquetas <b>/<i> de las plantillas de acá NO se escapan, son nuestras.
 from __future__ import annotations
 
 import html
+from decimal import Decimal
 from typing import Any, Iterable
+
+from .post_builder import format_brl, rango_relevante
 
 
 def esc(texto: Any) -> str:
@@ -23,12 +26,36 @@ def esc(texto: Any) -> str:
     return html.escape(str(texto)) if texto else ""
 
 
+def brl(valor: Any) -> str:
+    """Precio en formato brasileño: coma decimal y punto de miles.
+
+    Envuelve a `format_brl`, el MISMO formateador que arma el post que se publica,
+    para que el bot y el canal no muestren los precios distinto. Tolera floats, str
+    y None porque acá los valores llegan de la API y del reporte de ventas, no
+    siempre como Decimal.
+    """
+    try:
+        return format_brl(Decimal(str(valor)))
+    except (TypeError, ValueError, ArithmeticError):
+        return format_brl(Decimal("0"))
+
+
+def pct(valor: Any, decimales: int = 1) -> str:
+    """Porcentaje con coma decimal, igual que los precios."""
+    try:
+        return f"{float(valor):.{decimales}f}".replace(".", ",") + "%"
+    except (TypeError, ValueError):
+        return "0,0%"
+
+
 def texto_idea(n: int, idea: Any) -> str:
+    aviso = aviso_rango(getattr(idea, "precio_min", None), getattr(idea, "precio_max", None))
     return (
         f"<b>{n}. {esc(idea.titulo[:90])}</b>\n"
-        f"R$ {idea.precio} - {idea.ventas} vendidos - "
+        f"{brl(idea.precio)} - {idea.ventas} vendidos - "
         f"{idea.comision_pct:.0f}% comision - {idea.rating} estrellas\n"
-        f"{idea.link}\n\n"
+        + (f"{aviso}\n" if aviso else "")
+        + f"{idea.link}\n\n"
         f"<i>Referencia de video: /video {idea.link}</i>"
     )
 
@@ -38,7 +65,7 @@ def texto_tendencia(n: int, x: Any) -> str:
         f"<b>{n}. {esc(x.titulo[:80])}</b>\n"
         f"+{x.nuevas} ventas en {x.dias:.0f} dias "
         f"({x.por_dia:.0f}/dia, +{x.crecimiento_pct:.0f}%)\n"
-        f"{x.ventas_antes} -> {x.ventas_ahora} | R$ {x.precio:.2f} | "
+        f"{x.ventas_antes} -> {x.ventas_ahora} | {brl(x.precio)} | "
         f"{x.comision_pct:.0f}% comision\n"
         f"{x.link}\n\n"
         f"<i>Referencia de video: /video {x.link} nativo</i>"
@@ -58,8 +85,8 @@ def texto_grabados(total: int, ultimos: Iterable[Any]) -> str:
 def texto_ventas(v: Any) -> str:
     lineas = [
         f"<b>Ultimos {v.dias} dias</b>",
-        f"Comision: <b>R$ {v.comision:.2f}</b> en {v.completados} ventas",
-        f"Promedio por venta: R$ {v.por_venta:.2f}",
+        f"Comision: <b>{brl(v.comision)}</b> en {v.completados} ventas",
+        f"Promedio por venta: {brl(v.por_venta)}",
     ]
     if v.cancelados or v.pendientes:
         lineas.append(f"({v.cancelados} canceladas, {v.pendientes} pendientes, no contadas)")
@@ -70,7 +97,7 @@ def texto_ventas(v: Any) -> str:
         for banda in v.bandas:
             lineas.append(
                 f"{esc(banda.etiqueta)}: {banda.items} vendidos, "
-                f"R$ {banda.comision:.2f} (R$ {banda.por_item:.2f} c/u)"
+                f"{brl(banda.comision)} ({brl(banda.por_item)} c/u)"
             )
 
     if v.origenes:
@@ -78,13 +105,29 @@ def texto_ventas(v: Any) -> str:
         lineas.append("<b>Por origen del click</b>")
         for o in v.origenes:
             lineas.append(
-                f"{esc(o.etiqueta)}: {o.items} vendidos, {o.tasa_pct:.1f}% real "
-                f"(R$ {o.comision:.2f})"
+                f"{esc(o.etiqueta)}: {o.items} vendidos, {pct(o.tasa_pct)} real "
+                f"({brl(o.comision)})"
             )
 
     if v.top:
         lineas.append("")
         lineas.append("<b>Los que mas dejaron</b>")
         for nombre, com in v.top:
-            lineas.append(f"R$ {com:.2f} - {esc(nombre)}")
+            lineas.append(f"{brl(com)} - {esc(nombre)}")
     return "\n".join(lineas)
+
+
+def aviso_rango(minimo: Any, maximo: Any) -> str | None:
+    """Advertencia de que el precio publicado es el de la variación más barata.
+
+    Va SIEMPRE a Lanny, nunca dentro del post que se publica: el precio anunciado no
+    esta mal (es el de partida, Shopee lo muestra igual), lo que falta es que ella lo
+    sepa para aclararlo hablando en el video. Devuelve None si no vale la pena.
+    """
+    if not rango_relevante(minimo, maximo):
+        return None
+    lo, hi = Decimal(str(minimo)), Decimal(str(maximo))
+    return (
+        f"⚠️ Ojo: este producto tiene variaciones de {brl(lo)} a {brl(hi)}. "
+        f"El precio del post es el de la <b>mas barata</b>; conviene aclararlo en el video."
+    )

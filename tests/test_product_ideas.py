@@ -215,3 +215,29 @@ def test_todo_alias_tiene_nombre_y_viceversa():
 
     assert {c for c in CATEGORIAS.values() if c not in NOMBRES} == set()
     assert {c for c in NOMBRES if c not in CATEGORIAS.values()} == set()
+
+
+def test_idea_lleva_el_rango_de_precios():
+    """Sin esto no se puede avisar que el precio es el de la variacion mas barata."""
+    from src.product_ideas import _a_idea
+    idea = _a_idea({
+        "itemId": "123", "productName": "Cartao De Memoria Micro SD 128GB",
+        "price": "9.88", "priceMin": "9.88", "priceMax": "69.88",
+        "sales": 500, "ratingStar": "4.8", "commissionRate": "0.12",
+        "offerLink": "https://s.shopee.com.br/x", "priceDiscountRate": 10,
+        "imageUrl": "", "shopName": "Tienda", "productCatIds": [100636],
+    })
+    assert idea is not None
+    assert str(idea.precio_min) == "9.88"
+    assert str(idea.precio_max) == "69.88"
+
+
+def test_idea_sin_rango_no_rompe():
+    from src.product_ideas import _a_idea
+    idea = _a_idea({
+        "itemId": "1", "productName": "X", "price": "10", "sales": 1,
+        "ratingStar": "4", "commissionRate": "0.1",
+        "offerLink": "https://s.shopee.com.br/x", "priceDiscountRate": 0,
+    })
+    assert idea is not None
+    assert idea.precio_min is None and idea.precio_max is None

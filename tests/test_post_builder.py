@@ -108,3 +108,42 @@ def test_build_post_sin_extras_no_cambia():
 
     assert build_post(producto, "GANCHO") == build_post(producto, "GANCHO", extra_lines=())
     assert "🏷️" not in build_post(producto, "GANCHO")
+
+
+def test_precio_con_descuento_Y_rango_conserva_las_dos_cosas():
+    """64 de 200 productos de Shopee tienen descuento Y variaciones. Mostrar solo
+    "A partir de" borraria el "De/Por", que es el gancho del post; mostrar solo
+    "Por:" mentiria sobre el precio de las variaciones caras."""
+    from decimal import Decimal
+
+    from src.models import Product
+    from src.post_builder import build_price_block
+
+    p = Product(item_id=0, shop_id=0, name="X", price_final=Decimal("9.88"),
+                price_original=Decimal("19.90"), image_url="", affiliate_link="",
+                is_price_range=True)
+    bloque = build_price_block(p)
+    assert "De: R$ 19,90" in bloque
+    assert "A partir de: R$ 9,88" in bloque
+    assert "Por: R$ 9,88" not in bloque
+
+
+def test_rango_sin_descuento_sigue_igual():
+    from decimal import Decimal
+
+    from src.models import Product
+    from src.post_builder import build_price_block
+
+    p = Product(item_id=0, shop_id=0, name="X", price_final=Decimal("9.88"),
+                image_url="", affiliate_link="", is_price_range=True)
+    assert "A partir de R$ 9,88" in build_price_block(p)
+
+
+def test_rango_relevante_usa_el_mismo_corte_que_el_aviso():
+    from decimal import Decimal
+
+    from src.post_builder import rango_relevante
+
+    assert rango_relevante(Decimal("20"), Decimal("30"))
+    assert not rango_relevante(Decimal("20"), Decimal("25"))
+    assert not rango_relevante(None, Decimal("30"))

@@ -121,7 +121,7 @@ CATEGORIAS: dict[str, int] = {
 }
 
 _CAMPOS = (
-    "itemId productName price sales ratingStar commissionRate "
+    "itemId productName price priceMin priceMax sales ratingStar commissionRate "
     "priceDiscountRate imageUrl offerLink shopName productCatIds"
 )
 
@@ -133,6 +133,10 @@ class Idea:
     item_id: int
     titulo: str
     precio: Decimal
+    # El precio de arriba es el de la variacion MAS BARATA (medido: 300 de 300). Con
+    # el rango se avisa cuando hay variaciones bastante mas caras.
+    precio_min: Decimal | None
+    precio_max: Decimal | None
     ventas: int
     comision_pct: Decimal
     rating: Decimal
@@ -245,6 +249,16 @@ def _variar(ideas: list["Idea"], cuantas: int) -> list["Idea"]:
     return (elegidas + sobrantes)[:cuantas]
 
 
+def _a_decimal_opt(valor) -> Decimal | None:
+    """`Decimal(str(...))` tolerante: la API puede no mandar el campo."""
+    if valor is None:
+        return None
+    try:
+        return Decimal(str(valor))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+
 def _a_idea(nodo: dict) -> Idea | None:
     try:
         precio = Decimal(str(nodo.get("price") or "0"))
@@ -263,6 +277,8 @@ def _a_idea(nodo: dict) -> Idea | None:
         item_id=item_id,
         titulo=nodo["productName"],
         precio=precio,
+        precio_min=_a_decimal_opt(nodo.get("priceMin")),
+        precio_max=_a_decimal_opt(nodo.get("priceMax")),
         ventas=ventas,
         comision_pct=comision,
         rating=rating,
