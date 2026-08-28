@@ -5,3 +5,5 @@ python-dotenv>=1.0,<2
 requests>=2.31,<3
 python-telegram-bot>=21.0,<22
 Pillow>=10.0,<12
+# Trae el binario de ffmpeg: en Windows evita instalarlo aparte y ponerlo en el PATH.
+imageio-ffmpeg>=0.5,<1
