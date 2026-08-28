@@ -23,6 +23,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from src.config import load_config
 from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
+from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import to_vertical
 
@@ -35,6 +36,12 @@ _MSG_VIDEO_PESADO = (
     "o convertilo en la PC."
 )
 _MSG_VIDEO_FALLO = "No pude convertir ese video. Fijate que sea un MP4 válido."
+_MSG_IDEAS_USO = (
+    "Usá /ideas <categoría o palabra>.\n\n"
+    "Categorías: {cats}\n\n"
+    "O cualquier palabra suelta, por ejemplo: /ideas organizador cozinha"
+)
+_MSG_IDEAS_VACIO = "No encontré nada para eso. Probá otra palabra o una categoría."
 _MSG_REGISTRO_OK = (
     "Listo, guardé tus credenciales. De ahora en más los posts van a llevar TU link "
     "de afiliado."
@@ -115,6 +122,51 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         filename=ref.filename,
         caption=ref.caption[:1024],
     )
+
+
+async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/ideas <categoría o palabra>` — qué conviene grabar, ranqueado.
+
+    Usa las credenciales del usuario si las registró, para que los links que
+    reciba sean suyos y no de la cuenta por defecto."""
+    cfg = context.bot_data["cfg"]
+
+    user = _check_access(update, context)
+    if user is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    consulta = " ".join(context.args or []).strip()
+    if not consulta:
+        await update.message.reply_text(
+            _MSG_IDEAS_USO.format(cats=", ".join(sorted(set(CATEGORIAS))))
+        )
+        return
+
+    cat = nombre_categoria(consulta)
+    donde = f"en {cat}" if cat else f"por \"{consulta}\""
+    await update.message.reply_text(f"Buscando ideas {donde}...")
+
+    app_id, secret = context.bot_data["credentials_store"].get(user.id) or (
+        cfg["shopee_app_id"],
+        cfg["shopee_secret"],
+    )
+    ideas = buscar_ideas(consulta, app_id, secret)
+    if not ideas:
+        await update.message.reply_text(_MSG_IDEAS_VACIO)
+        return
+
+    for n, idea in enumerate(ideas, 1):
+        texto = (
+            f"<b>{n}. {idea.titulo[:90]}</b>\n"
+            f"R$ {idea.precio} - {idea.ventas} vendidos - "
+            f"{idea.comision_pct:.0f}% comision - {idea.rating} estrellas\n"
+            f"{idea.link}\n\n"
+            f"<i>Referencia de video: /video {idea.link}</i>"
+        )
+        await update.message.reply_text(
+            texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        )
 
 
 async def _handle_video_vertical(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -206,6 +258,7 @@ def main() -> None:
     application.add_handler(CommandHandler("registrar_shopee", _handle_registrar_shopee))
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
     application.add_handler(CommandHandler("video", _handle_video))
+    application.add_handler(CommandHandler("ideas", _handle_ideas))
     application.add_handler(
         MessageHandler(
             (filters.VIDEO | filters.Document.VIDEO) & filters.ChatType.PRIVATE,
