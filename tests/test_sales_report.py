@@ -92,3 +92,56 @@ def test_precio_invalido_no_rompe():
     v = resumen_ventas("a", "s", http_post=_post([_item(precio="abc"), _item(comision="5")]))
     assert v.completados == 1
     assert v.comision == 5.0
+
+
+def _post_nodos(nodos, capturar=None):
+    """Varias conversiones, cada una con su `referrer`."""
+    def post(url, **kwargs):
+        if capturar is not None:
+            capturar.append(kwargs.get("data", ""))
+        return _Resp({"data": {"conversionReport": {"nodes": nodos}}})
+    return post
+
+
+def _nodo(referrer, items):
+    return {"referrer": referrer, "orders": [{"items": items}]}
+
+
+def test_separa_la_tasa_real_por_origen():
+    """El motivo de todo esto: Shopee Video paga bastante menos que el link, y
+    promediando los dos juntos no se ve."""
+    v = resumen_ventas("a", "s", http_post=_post_nodos([
+        _nodo("WhatsApp", [_item(precio="100", comision="8")]),
+        _nodo("Shopeevideo-Shopee", [_item(precio="100", comision="4")]),
+    ]))
+    por = {o.etiqueta: o for o in v.origenes}
+    assert por["WhatsApp"].tasa_pct == 8.0
+    assert por["Shopee Video"].tasa_pct == 4.0
+
+
+def test_origen_cuenta_las_unidades_no_las_lineas():
+    """La tasa es comision sobre lo VENDIDO: 2 unidades de R$50 son R$100."""
+    item = _item(precio="50", comision="10")
+    item["qty"] = 2
+    v = resumen_ventas("a", "s", http_post=_post_nodos([_nodo("WhatsApp", [item])]))
+    o = v.origenes[0]
+    assert o.vendido == 100.0
+    assert o.tasa_pct == 10.0
+
+
+def test_origen_ignora_los_no_completados():
+    v = resumen_ventas("a", "s", http_post=_post_nodos([
+        _nodo("WhatsApp", [_item(precio="100", comision="8"),
+                           _item(precio="100", comision="99", estado="CANCELLED")]),
+    ]))
+    assert v.origenes[0].items == 1
+    assert v.origenes[0].tasa_pct == 8.0
+
+
+def test_origenes_ordenados_por_volumen_y_sin_referrer_no_rompe():
+    v = resumen_ventas("a", "s", http_post=_post_nodos([
+        _nodo(None, [_item(precio="10", comision="1")]),
+        _nodo("WhatsApp", [_item(precio="10", comision="1"),
+                           _item(precio="10", comision="1")]),
+    ]))
+    assert [o.etiqueta for o in v.origenes] == ["WhatsApp", "desconocido"]

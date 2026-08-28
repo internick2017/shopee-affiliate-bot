@@ -12,6 +12,13 @@ Dos decisiones de lectura, tomadas mirando los datos reales (90 días, 2026-08-2
   - Se agrupa por BANDA DE PRECIO, no por producto. Casi todos los productos
     vendieron una sola unidad (82 productos distintos en 75 conversiones), así que
     a nivel producto no hay patrón que aprender; la señal aparece al agregar.
+
+Y se desglosa por ORIGEN (`referrer`), porque Shopee paga distinto según de dónde
+vino el click. Medido sobre los mismos 90 días: WhatsApp 7,6% (50 items), Others
+8,5% (18), Websites 4,2% (3), Shopee Video 3,7% (2). O sea que el video paga cerca
+de la mitad que el link, y promediando todo junto eso no se ve. OJO: la muestra de
+video era de 2 items, demasiado chica para decidir nada — el desglose está acá
+justamente para que el número se acumule solo y en un mes se pueda mirar en serio.
 """
 
 from __future__ import annotations
@@ -23,6 +30,11 @@ from dataclasses import dataclass, field
 from .shopee_resolver import _graphql_call
 
 _ESTADO_VALIDO = "COMPLETED"
+
+# Los nombres que manda Shopee en `referrer`, traducidos. Solo se renombra lo que
+# se entiende mal: "Shopeevideo-Shopee" es justo el que hay que poder leer de un
+# vistazo. Un origen que no esté acá se muestra tal cual viene.
+_NOMBRE_ORIGEN = {"Shopeevideo-Shopee": "Shopee Video"}
 
 # Bordes de las bandas de precio, en reales. El último tramo es abierto.
 _BANDAS: tuple[tuple[float, float, str], ...] = (
@@ -46,6 +58,22 @@ class Banda:
 
 
 @dataclass
+class Origen:
+    """De dónde vino el click y qué tasa dejó realmente."""
+
+    etiqueta: str
+    items: int = 0
+    vendido: float = 0.0
+    comision: float = 0.0
+
+    @property
+    def tasa_pct(self) -> float:
+        """Comisión sobre lo vendido. Es LA cifra a comparar entre orígenes: la
+        comisión suelta solo dice que un canal vende más, no que pague mejor."""
+        return 100 * self.comision / self.vendido if self.vendido else 0.0
+
+
+@dataclass
 class Ventas:
     """Resumen del período. `error` presente = el resto sin sentido."""
 
@@ -56,6 +84,7 @@ class Ventas:
     comision: float = 0.0
     bandas: list[Banda] = field(default_factory=list)
     top: list[tuple[str, float]] = field(default_factory=list)
+    origenes: list[Origen] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -65,7 +94,8 @@ class Ventas:
 
 _CAMPOS = (
     "conversionReport(purchaseTimeStart:%d,purchaseTimeEnd:%d,limit:%d)"
-    "{nodes{orders{items{itemName itemPrice qty itemTotalCommission displayItemStatus}}}}"
+    "{nodes{referrer orders{items{itemName itemPrice qty itemTotalCommission"
+    " displayItemStatus}}}}"
 )
 
 
@@ -92,8 +122,13 @@ def resumen_ventas(
     v = Ventas(dias=dias)
     bandas = {e: Banda(e) for _lo, _hi, e in _BANDAS}
     por_producto: dict[str, float] = {}
+    origenes: dict[str, Origen] = {}
 
     for nodo in nodos:
+        # El `referrer` viene en la conversión, no en el item: un mismo pedido
+        # entero vino de un solo lugar.
+        crudo = nodo.get("referrer") or "desconocido"
+        origen = origenes.setdefault(crudo, Origen(_NOMBRE_ORIGEN.get(crudo, crudo)))
         for orden in nodo.get("orders") or []:
             for item in orden.get("items") or []:
                 estado = item.get("displayItemStatus")
@@ -106,8 +141,12 @@ def resumen_ventas(
                 try:
                     precio = float(item.get("itemPrice") or 0)
                     com = float(item.get("itemTotalCommission") or 0)
+                    unidades = int(item.get("qty") or 1)
                 except (TypeError, ValueError):
                     continue
+                origen.items += 1
+                origen.vendido += precio * unidades
+                origen.comision += com
                 v.completados += 1
                 v.comision += com
                 nombre = (item.get("itemName") or "?")[:50]
@@ -120,4 +159,6 @@ def resumen_ventas(
 
     v.bandas = [b for b in bandas.values() if b.items]
     v.top = sorted(por_producto.items(), key=lambda kv: -kv[1])[:5]
+    v.origenes = sorted((o for o in origenes.values() if o.items),
+                        key=lambda o: -o.items)
     return v
