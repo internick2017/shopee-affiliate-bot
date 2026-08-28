@@ -8,6 +8,7 @@ Uso:
     python bot_generador.py
 """
 
+import io
 import logging
 
 from telegram import Update
@@ -16,7 +17,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from src.config import load_config
 from src.post_builder import HookBank
-from src.post_generator_bot import generate_post_reply
+from src.post_generator_bot import generate_post_reply, generate_video_reference
 from src.user_credentials_store import UserCredentialsStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -73,6 +74,38 @@ async def _handle_olvidar_shopee(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text(_MSG_BORRADO_OK)
 
 
+async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/video <link>` — devuelve la imagen 9:16 de referencia para el generador
+    de video, más el prompt sugerido."""
+    cfg = context.bot_data["cfg"]
+
+    user = _check_access(update, context)
+    if user is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    await update.message.reply_text("Armando la referencia vertical, dame unos segundos...")
+
+    ref = generate_video_reference(
+        update.message.text or "",
+        cfg["shopee_app_id"],
+        cfg["shopee_secret"],
+        user_credentials=context.bot_data["credentials_store"].get(user.id),
+    )
+
+    if ref.error:
+        await update.message.reply_text(ref.error)
+        return
+
+    # Como documento y no como foto: Telegram recomprime las fotos, y esta imagen
+    # es el insumo de un generador de video — degradarla acá arruinaría el punto.
+    await update.message.reply_document(
+        document=io.BytesIO(ref.image_bytes),
+        filename=ref.filename,
+        caption=ref.caption[:1024],
+    )
+
+
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg = context.bot_data["cfg"]
     hooks = context.bot_data["hooks"]
@@ -125,6 +158,7 @@ def main() -> None:
 
     application.add_handler(CommandHandler("registrar_shopee", _handle_registrar_shopee))
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
+    application.add_handler(CommandHandler("video", _handle_video))
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, _handle_message)
     )

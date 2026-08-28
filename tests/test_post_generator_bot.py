@@ -157,3 +157,79 @@ def test_generate_post_reply_con_credenciales_propias_usa_su_link():
     assert reply.error is None
     assert "https://s.shopee.com.br/LINK_PROPRIO_DO_DANIEL" in reply.caption
     assert "https://s.shopee.com.br/LINK_QUE_DANIEL_MANDOU" not in reply.caption
+
+
+# --- referencia 9:16 para video -------------------------------------------------
+
+def _jpeg_cuadrado(size=400, color=(180, 140, 90)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (size, size), color).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _generar_referencia(text, **kwargs):
+    from src.post_generator_bot import generate_video_reference
+
+    defaults = dict(
+        http_get=_fake_get("https://shopee.com.br/produto-i.111.222"),
+        http_post=_fake_post(_PRODUCT_OFFER_BODY),
+        fetch_image=lambda url: _jpeg_cuadrado(),
+    )
+    defaults.update(kwargs)
+    return generate_video_reference(text, "app", "secret", **defaults)
+
+
+def test_referencia_devuelve_imagen_vertical():
+    import io
+
+    from PIL import Image
+
+    ref = _generar_referencia("mira esto https://s.shopee.com.br/abc123")
+    assert ref.error is None
+    assert Image.open(io.BytesIO(ref.image_bytes)).size == (1080, 1920)
+
+
+def test_referencia_incluye_titulo_y_prompt():
+    ref = _generar_referencia("https://s.shopee.com.br/abc123")
+    assert "Kit Panos de Limpeza" in ref.caption
+    assert "10 segundos" in ref.caption
+    assert "NÃO mostre telefone" in ref.caption
+
+
+def test_referencia_sin_link_da_error():
+    ref = _generar_referencia("hola, todo bien?")
+    assert ref.image_bytes is None
+    assert "link de Shopee" in ref.error
+
+
+def test_referencia_sin_producto_da_error():
+    ref = _generar_referencia(
+        "https://s.shopee.com.br/abc123",
+        http_post=_fake_post({"data": {"productOfferV2": {"nodes": []}}}),
+    )
+    assert ref.image_bytes is None
+    assert ref.error
+
+
+def test_referencia_si_falla_la_descarga_da_error():
+    def explota(url):
+        raise OSError("sin red")
+
+    ref = _generar_referencia("https://s.shopee.com.br/abc123", fetch_image=explota)
+    assert ref.image_bytes is None
+    assert "foto" in ref.error
+
+
+def test_referencia_no_exige_descuento():
+    """Un producto sin descuento igual sirve para un video, a diferencia del post."""
+    import copy
+
+    body = copy.deepcopy(_PRODUCT_OFFER_BODY)
+    body["data"]["productOfferV2"]["nodes"][0]["priceDiscountRate"] = 0
+    ref = _generar_referencia("https://s.shopee.com.br/abc123", http_post=_fake_post(body))
+    assert ref.error is None
+    assert ref.image_bytes
