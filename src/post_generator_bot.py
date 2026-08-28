@@ -113,6 +113,12 @@ RITMO:
 Movimentos suaves de câmera e zoom leve. Fotorrealista, iluminação profissional,
 movimento natural.
 
+NARRAÇÃO (incluir sempre):
+Adicione narração em português do Brasil, voz natural e clara, tom comercial
+amigável e convincente. Uma frase curta que caiba confortavelmente em 10 segundos.
+Fale apenas de características reais e visíveis do produto.
+NÃO invente informações, preços, promoções nem prazos de entrega.
+
 NÃO adicione texto novo, logotipos, pessoas, animais nem objetos novos.
 NÃO mostre telefone, moldura, tela ou interface de aplicativo.
 NÃO mostre crianças ou bebês."""
@@ -142,6 +148,12 @@ RITMO:
 7-10s: enquadramento final claro do produto, centralizado.
 
 Fotorrealista, iluminação profissional, movimento natural.
+
+NARRAÇÃO (incluir sempre):
+Adicione narração em português do Brasil, voz natural e clara, tom comercial
+amigável e convincente. Uma frase curta que caiba confortavelmente em 10 segundos.
+Fale apenas de características reais e visíveis do produto.
+NÃO invente informações, preços, promoções nem prazos de entrega.
 
 NÃO adicione texto novo, logotipos, pessoas, animais nem objetos novos.
 NÃO mostre telefone, moldura, tela ou interface de aplicativo.

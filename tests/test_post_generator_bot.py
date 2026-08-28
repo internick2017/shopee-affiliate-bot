@@ -271,3 +271,18 @@ def test_referencia_devuelve_el_link_del_producto():
     """Sin esto el link se pierde entre pedir la referencia y volver con el video."""
     ref = _generar_referencia("https://s.shopee.com.br/abc123")
     assert ref.link == "https://s.shopee.com.br/propio"
+
+
+def test_las_dos_variantes_piden_narracion():
+    """Sin esto hay que pedir la voz en una segunda vuelta, y cada vuelta gasta
+    una generacion."""
+    for nat in (False, True):
+        ref = _generar_referencia("https://s.shopee.com.br/abc123", nativo=nat)
+        assert "NARRAÇÃO" in ref.prompt
+        assert "português do Brasil" in ref.prompt
+
+
+def test_la_narracion_prohibe_inventar_datos():
+    """El modelo no conoce precio ni plazos: si los narra, miente al comprador."""
+    ref = _generar_referencia("https://s.shopee.com.br/abc123")
+    assert "NÃO invente informações, preços" in ref.prompt
