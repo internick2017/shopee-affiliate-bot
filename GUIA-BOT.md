@@ -3,6 +3,13 @@
 Todo se hace hablándole al bot por chat privado. No hace falta instalar nada ni
 usar la computadora: funciona desde el celular.
 
+**Si no te acordás de un comando**, escribí una barra `/` en el chat y Telegram te
+despliega la lista completa con una explicación de cada uno. También podés mandar
+`/ayuda`.
+
+> ⚠️ La barra va **pegada** a la palabra: `/ventas` sí, `/ ventas` no. Con el
+> espacio Telegram no lo reconoce como comando. Si te pasa, el bot te lo avisa.
+
 ---
 
 ## El flujo de todos los días
