@@ -83,6 +83,22 @@ python run_ofertas.py            # el bot
 python run_ofertas.py --observe  # diagnóstico: loguea cada mensaje y su chat_id, sin postear
 ```
 
+### Bot generador de posts
+
+En chat privado, un usuario de `BOT_ALLOWED_USERS` puede:
+
+| Manda | Recibe |
+|---|---|
+| un link de Shopee | el post armado (foto + caption con su link de afiliado) |
+| `/video <link>` | la imagen 9:16 de referencia + el prompt para el generador de video |
+| un archivo de video | el mismo video reencuadrado a 1080x1920 para Shopee Video |
+| `/registrar_shopee <app_id> <secret>` | guarda sus credenciales propias |
+| `/olvidar_shopee` | las borra |
+
+El formato de salida de Veo es un parametro de generacion (`aspect_ratio`, default
+16:9) que la app de Gemini no expone, por eso el video se reencuadra despues en vez
+de pedirlo por prompt.
+
 En Windows, sin ventana visible: `iniciar-bot-ofertas-oculto.vbs` (o
 `iniciar-todo-oculto.vbs` para arrancar tambien el bot generador de posts).
 Para pararlos: `detener-bots-ocultos.vbs`.
