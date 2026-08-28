@@ -25,6 +25,7 @@ from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.sales_report import resumen_ventas
+from src.trend_store import TrendStore
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
 
@@ -141,6 +142,51 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             f"Prompt {modo}.\n\nLink del producto:\n{ref.link}",
             disable_web_page_preview=True,
+        )
+
+
+async def _handle_tendencia(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/tendencia [dias]` — que esta despegando AHORA, no que vendio mas siempre.
+
+    Necesita al menos dos dias de muestreo (`run_snapshot.py`): con una sola
+    muestra no hay derivada que calcular."""
+    if _check_access(update, context) is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    ventana = 7
+    if context.args and context.args[0].isdigit():
+        ventana = max(2, min(int(context.args[0]), 90))
+
+    store = context.bot_data["trend_store"]
+    dias = store.dias_con_datos()
+    if dias < 2:
+        await update.message.reply_text(
+            f"Todavia no puedo calcular tendencia: tengo {dias} dia(s) de datos y "
+            "necesito al menos 2. El muestreo corre una vez por dia "
+            "(run_snapshot.py); manana ya deberia haber algo."
+        )
+        return
+
+    tendencias = store.tendencias(ventana_dias=ventana)[:5]
+    if not tendencias:
+        await update.message.reply_text(
+            f"Ningun producto crecio lo suficiente en los ultimos {ventana} dias."
+        )
+        return
+
+    for n, x in enumerate(tendencias, 1):
+        texto = (
+            f"<b>{n}. {x.titulo[:80]}</b>\n"
+            f"+{x.nuevas} ventas en {x.dias:.0f} dias "
+            f"({x.por_dia:.0f}/dia, +{x.crecimiento_pct:.0f}%)\n"
+            f"{x.ventas_antes} -> {x.ventas_ahora} | R$ {x.precio:.2f} | "
+            f"{x.comision_pct:.0f}% comision\n"
+            f"{x.link}\n\n"
+            f"<i>Referencia de video: /video {x.link} nativo</i>"
+        )
+        await update.message.reply_text(
+            texto, parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
 
 
@@ -350,12 +396,14 @@ def main() -> None:
     application.bot_data["cfg"] = cfg
     application.bot_data["hooks"] = HookBank.from_file(cfg["hooks_file"])
     application.bot_data["credentials_store"] = UserCredentialsStore(cfg["user_credentials_db"])
+    application.bot_data["trend_store"] = TrendStore(cfg["trend_db"])
 
     application.add_handler(CommandHandler("registrar_shopee", _handle_registrar_shopee))
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
     application.add_handler(CommandHandler("video", _handle_video))
     application.add_handler(CommandHandler("ideas", _handle_ideas))
     application.add_handler(CommandHandler("ventas", _handle_ventas))
+    application.add_handler(CommandHandler("tendencia", _handle_tendencia))
     application.add_handler(
         MessageHandler(
             (filters.VIDEO | filters.Document.VIDEO) & filters.ChatType.PRIVATE,
