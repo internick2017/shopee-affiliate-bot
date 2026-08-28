@@ -180,3 +180,23 @@ primero, y por eso existe `/tendencia`.
 
 **Fijate en la comisión, no solo en el precio.** Un producto de R$ 100 al 12%
 deja más que uno de R$ 10 al 30%.
+
+**Si el bot te avisa que hay variaciones, decilo en el video.** Shopee informa
+siempre el precio de la variación más barata. Cuando las otras son bastante más
+caras, el post dice "A partir de: R$ X" en vez de "Por: R$ X", y aparte te llega
+un aviso con el rango completo. Aclararlo hablando evita que el cliente entre,
+vea otro precio y se sienta engañado.
+
+---
+
+## Por qué el post está en portugués y el bot te habla en español
+
+No es un error ni algo a medio traducir, es a propósito:
+
+- **El post** (lo que se publica en el canal) va en **portugués**, porque lo lee
+  el cliente brasileño.
+- **Todo lo que el bot te dice a vos** va en **español**: los avisos, `/ideas`,
+  `/ventas`, los mensajes de error.
+
+Si alguna vez ves un mensaje del bot en portugués, o un post en español, eso sí
+es un error: avisale a Nick.
