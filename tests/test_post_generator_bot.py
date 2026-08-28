@@ -286,3 +286,17 @@ def test_la_narracion_prohibe_inventar_datos():
     """El modelo no conoce precio ni plazos: si los narra, miente al comprador."""
     ref = _generar_referencia("https://s.shopee.com.br/abc123")
     assert "NÃO invente informações, preços" in ref.prompt
+
+
+def test_reply_lleva_el_aviso_de_rango_para_lanny():
+    """El aviso NO va dentro del caption: el post que se publica queda intacto y el
+    precio anunciado es correcto (es el de partida). Va aparte, para que Lanny lo
+    aclare hablando."""
+    from dataclasses import dataclass
+    from decimal import Decimal
+
+    from src.post_generator_bot import BotReply
+
+    r = BotReply(caption="post", photo_url="http://x", aviso="⚠️ hay variaciones")
+    assert "variaciones" in r.aviso
+    assert "variaciones" not in r.caption

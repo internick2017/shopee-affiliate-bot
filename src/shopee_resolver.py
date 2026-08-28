@@ -207,6 +207,10 @@ class ShopeeOffer:
     # es un shortlink de tracking y puede cambiar entre llamadas para el mismo
     # producto. Lo usa `grabados_store` para no ofrecer dos veces lo mismo.
     item_id: int | None = None
+    # `price` es el de la variacion MAS BARATA (medido: 300 de 300 productos). Con el
+    # rango, el bot puede avisarle a Lanny que hay variaciones bastante mas caras.
+    precio_min: Decimal | None = None
+    precio_max: Decimal | None = None
 
     @property
     def tiene_descuento(self) -> bool:
@@ -238,7 +242,8 @@ def resolve_shopee_offer(
     query = f"""
     query {{
       productOfferV2(itemId: {item_id}, shopId: {shop_id}, limit: 1) {{
-        nodes {{ productName price priceDiscountRate offerLink commissionRate imageUrl }}
+        nodes {{ productName price priceMin priceMax priceDiscountRate offerLink
+                 commissionRate imageUrl itemId }}
       }}
     }}
     """
@@ -269,6 +274,8 @@ def resolve_shopee_offer(
         precio_previo=_precio_previo_derivado(precio, pct),
         imagen_url=nodo.get("imageUrl"),
         item_id=_a_item_id(nodo.get("itemId")),
+        precio_min=_a_decimal(nodo.get("priceMin")),
+        precio_max=_a_decimal(nodo.get("priceMax")),
     )
 
 

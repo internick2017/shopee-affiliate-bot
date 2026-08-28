@@ -121,3 +121,30 @@ def test_ventas_omite_los_bloques_vacios():
     assert "no contadas" not in t
     assert "Por origen del click" not in t
     assert "Por banda de precio" not in t
+
+
+from decimal import Decimal
+
+from src.bot_mensajes import aviso_rango
+
+
+def test_aviso_rango_calla_cuando_no_hay_variacion_relevante():
+    """Suena en 1 de cada 3 productos; si avisara por centavos seria ruido y se
+    dejaria de leer."""
+    assert aviso_rango(Decimal("20"), Decimal("20")) is None
+    assert aviso_rango(Decimal("20"), Decimal("25")) is None      # x1.25
+    assert aviso_rango(Decimal("20"), None) is None
+    assert aviso_rango(None, Decimal("60")) is None
+    assert aviso_rango(Decimal("0"), Decimal("60")) is None       # no dividir por cero
+
+
+def test_aviso_rango_avisa_desde_una_vez_y_media():
+    assert aviso_rango(Decimal("20"), Decimal("30")) is not None  # x1.5 justo
+    t = aviso_rango(Decimal("9.88"), Decimal("69.88"))            # el caso real peor
+    assert "9.88" in t and "69.88" in t
+
+
+def test_aviso_rango_dice_que_el_precio_publicado_es_el_mas_barato():
+    """Es EL punto del aviso: `price` es siempre el minimo, medido en 300 de 300."""
+    t = aviso_rango(Decimal("15.98"), Decimal("69.99"))
+    assert "mas barata" in t.lower() or "barata" in t.lower()

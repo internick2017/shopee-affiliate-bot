@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 
 from .post_builder import HookBank
 from .shopee_resolver import extract_shopee_shortlinks, resolve_shopee_offer
+from .bot_mensajes import aviso_rango
 from .shopee_review import _build_post_propio
 from .vertical_canvas import build_vertical_canvas
 
@@ -25,6 +26,10 @@ class BotReply:
     ausentes, y viceversa — nunca los tres a la vez."""
 
     caption: str | None = None
+    # Advertencia para Lanny, SEPARADA del caption a proposito: el post que se
+    # publica queda intacto (el precio anunciado es el de partida, y esta bien),
+    # esto es solo para que ella sepa que hay variaciones mas caras.
+    aviso: str | None = None
     photo_url: str | None = None
     error: str | None = None
 
@@ -71,7 +76,11 @@ def generate_post_reply(
         offer = replace(offer, link_propio=link_original)
 
     caption = _build_post_propio(offer, None, hooks.next())
-    return BotReply(caption=caption, photo_url=offer.imagen_url)
+    return BotReply(
+        caption=caption,
+        photo_url=offer.imagen_url,
+        aviso=aviso_rango(offer.precio_min, offer.precio_max),
+    )
 
 
 _ERROR_SIN_FOTO = (
@@ -175,6 +184,7 @@ class VideoReference:
     link: str | None = None
     # Identidad del producto, para anotarlo como grabado y no volver a ofrecerlo.
     item_id: int | None = None
+    aviso: str | None = None
     filename: str | None = None
     error: str | None = None
 
@@ -227,6 +237,7 @@ def generate_video_reference(
         prompt=_PROMPT_VIDEO_NATIVO if nativo else _PROMPT_VIDEO,
         link=offer.link_propio,
         item_id=offer.item_id,
+        aviso=aviso_rango(offer.precio_min, offer.precio_max),
         filename="referencia-9x16.jpg",
     )
 

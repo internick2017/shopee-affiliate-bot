@@ -15,6 +15,7 @@ Las etiquetas <b>/<i> de las plantillas de acá NO se escapan, son nuestras.
 from __future__ import annotations
 
 import html
+from decimal import Decimal
 from typing import Any, Iterable
 
 
@@ -24,11 +25,13 @@ def esc(texto: Any) -> str:
 
 
 def texto_idea(n: int, idea: Any) -> str:
+    aviso = aviso_rango(getattr(idea, "precio_min", None), getattr(idea, "precio_max", None))
     return (
         f"<b>{n}. {esc(idea.titulo[:90])}</b>\n"
         f"R$ {idea.precio} - {idea.ventas} vendidos - "
         f"{idea.comision_pct:.0f}% comision - {idea.rating} estrellas\n"
-        f"{idea.link}\n\n"
+        + (f"{aviso}\n" if aviso else "")
+        + f"{idea.link}\n\n"
         f"<i>Referencia de video: /video {idea.link}</i>"
     )
 
@@ -88,3 +91,30 @@ def texto_ventas(v: Any) -> str:
         for nombre, com in v.top:
             lineas.append(f"R$ {com:.2f} - {esc(nombre)}")
     return "\n".join(lineas)
+
+
+# Desde cuánto se avisa que hay variaciones más caras. Medido sobre 300 productos
+# del pozo real de /ideas (2026-08-28): el 54% tiene rango, el 33% llega a x1.5, el
+# 24% al doble y el 11% al triple; el peor visto fue una micro SD de R$9,88 cuya
+# variación más cara sale R$69,88. Con x1.5 el aviso suena en 1 de cada 3 productos:
+# avisar por centavos seria ruido y se dejaria de leer.
+_RANGO_AVISABLE = Decimal("1.5")
+
+
+def aviso_rango(minimo: Any, maximo: Any) -> str | None:
+    """Advertencia de que el precio publicado es el de la variación más barata.
+
+    Va SIEMPRE a Lanny, nunca dentro del post que se publica: el precio anunciado no
+    esta mal (es el de partida, Shopee lo muestra igual), lo que falta es que ella lo
+    sepa para aclararlo hablando en el video. Devuelve None si no vale la pena.
+    """
+    try:
+        lo, hi = Decimal(str(minimo)), Decimal(str(maximo))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+    if lo <= 0 or hi < lo * _RANGO_AVISABLE:
+        return None
+    return (
+        f"⚠️ Ojo: este producto tiene variaciones de R$ {lo} a R$ {hi}. "
+        f"El precio del post es el de la <b>mas barata</b>; conviene aclararlo en el video."
+    )

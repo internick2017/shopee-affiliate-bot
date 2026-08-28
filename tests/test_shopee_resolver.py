@@ -321,3 +321,21 @@ def test_resolve_offer_sin_commission_rate_da_cero():
 
     assert offer is not None
     assert offer.comision_pct == Decimal("0")
+
+
+def test_offer_lleva_el_rango_de_precios():
+    """`price` es el de la variacion mas barata; sin el rango no se puede avisar."""
+    from src.shopee_resolver import resolve_shopee_offer
+    nodo = {"productName": "Cartao Micro SD 128GB", "price": "9.88",
+            "priceMin": "9.88", "priceMax": "69.88", "priceDiscountRate": 10,
+            "offerLink": "https://s.shopee.com.br/nuevo", "commissionRate": "0.12",
+            "imageUrl": "http://img", "itemId": "77"}
+    offer = resolve_shopee_offer(
+        "https://s.shopee.com.br/abc",
+        "a", "s",
+        http_get=_fake_get("https://shopee.com.br/x-i.111.222"),
+        http_post=_fake_post({"data": {"productOfferV2": {"nodes": [nodo]}}}),
+    )
+    assert offer is not None
+    assert str(offer.precio_min) == "9.88"
+    assert str(offer.precio_max) == "69.88"
