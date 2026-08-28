@@ -25,8 +25,17 @@ def test_price_kind_discount_when_original_greater():
 
 
 def test_price_kind_range_when_flagged():
-    p = _product(is_price_range=True, price_original=Decimal("35.00"))
+    """Sin descuento, el rango manda."""
+    p = _product(is_price_range=True)
     assert p.price_kind == "range"
+
+
+def test_price_kind_combina_descuento_y_rango():
+    """CAMBIO DELIBERADO (2026-08-28): antes el rango pisaba al descuento y el post
+    perdia el "De/Por", que es el gancho. Con 64 de 200 productos de Shopee teniendo
+    las dos cosas, ahora se muestran juntas."""
+    p = _product(is_price_range=True, price_original=Decimal("35.00"))
+    assert p.price_kind == "discount_range"
 
 
 def test_price_kind_plain_when_original_not_greater():

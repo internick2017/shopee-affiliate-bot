@@ -13,9 +13,35 @@ def format_brl(value: Decimal) -> str:
     return f"R$ {integer_with_dots},{frac_part}"
 
 
+# Desde cuántas veces el precio mínimo se considera que el producto "tiene
+# variaciones" y hay que decir "A partir de". Medido sobre 300 productos reales
+# (2026-08-28): el 54% tiene algún rango, pero avisar por centavos seria ruido.
+_RANGO_RELEVANTE = Decimal("1.5")
+
+
+def rango_relevante(minimo, maximo) -> bool:
+    """¿El máximo está lo bastante lejos del mínimo como para aclararlo?
+
+    Vive acá, al lado de `format_brl`, porque el mismo corte lo usan el post que se
+    publica y el aviso que recibe Lanny: si se separaran, el bot avisaria de un
+    rango que el post no reconoce (o al revés).
+    """
+    try:
+        lo, hi = Decimal(str(minimo)), Decimal(str(maximo))
+    except (TypeError, ValueError, ArithmeticError):
+        return False
+    return lo > 0 and hi >= lo * _RANGO_RELEVANTE
+
+
 def build_price_block(product: Product) -> str:
     """Arma el bloque de precio según la variante del producto."""
     kind = product.price_kind
+    if kind == "discount_range":
+        assert product.price_original is not None
+        return (
+            f"❌ De: {format_brl(product.price_original)}\n"
+            f"✅ A partir de: {format_brl(product.price_final)} 😱🛒"
+        )
     if kind == "range":
         return f"✅ A partir de {format_brl(product.price_final)} 😱🛒"
     if kind == "discount":

@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from .links import SHOPEE_LINK_RE
 from .models import Product
-from .post_builder import build_post
+from .post_builder import build_post, rango_relevante
 from .posting import post_offer
 from .review_forward import ReviewPipeline, build_review_message, has_links, review_dedup_key
 from .shopee_resolver import (
@@ -73,6 +73,10 @@ def _build_post_propio(offer: ShopeeOffer, extra_link: str | None, hook: str) ->
         image_url=offer.imagen_url or "",
         price_original=offer.precio_previo,
         affiliate_link=offer.link_propio,
+        # Con variaciones caras el post dice "A partir de": el precio de Shopee es
+        # el de la variacion mas barata (medido: 300 de 300), y anunciarlo como
+        # "Por:" es una promesa que el carrito no cumple.
+        is_price_range=rango_relevante(offer.precio_min, offer.precio_max),
     )
     return build_post(producto, hook, extra_lines=tuple(extras))
 
