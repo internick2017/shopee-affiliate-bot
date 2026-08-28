@@ -6,10 +6,19 @@ referencia ni del prompt. La app de Gemini no expone ese control, así que por
 mucho que uno pida vertical, el video sale horizontal. Como el parámetro no está
 a mano, el formato se arregla después: el video se reencuadra localmente.
 
-Estrategia: banda central con el video entero + relleno difuminado derivado del
-propio video. Se descartó el recorte central (agrandar y cortar los costados)
-porque en un video de producto lo único que importa es el producto, y recortar
-dos tercios del ancho arriesga justamente cortarlo.
+Dos modos, porque hay un compromiso real y depende del video:
+
+  - MARCO: banda central con el video entero + relleno difuminado derivado de si
+    mismo. No pierde nada de imagen, pero se nota que el contenido no fue hecho
+    para vertical: quedan dos franjas y el ojo las lee como enmarcado.
+  - RECORTE: agranda el video hasta llenar el cuadro vertical y corta los
+    costados. Se ve nativo, a pantalla completa, sin franjas; a cambio pierde
+    aproximadamente dos tercios del ancho y baja la resolucion efectiva.
+
+RECORTE sirve cuando el producto esta centrado en el cuadro, que es lo habitual en
+un video de producto: lo que se va son los costados, que son fondo. Si el producto
+se mueve o esta descentrado, MARCO es lo seguro. Por eso conviven en vez de que uno
+reemplace al otro.
 
 ffmpeg viene del paquete `imageio-ffmpeg`, que trae el binario: en Windows evita
 tener que instalarlo aparte y ponerlo en el PATH.
@@ -38,6 +47,18 @@ def ffmpeg_exe() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+MODO_MARCO = "marco"
+MODO_RECORTE = "recorte"
+
+
+def _filtro_recorte(ancho: int, alto: int) -> str:
+    """Agranda hasta CUBRIR el lienzo vertical y recorta al centro. Sin franjas."""
+    return (
+        f"scale={ancho}:{alto}:force_original_aspect_ratio=increase,"
+        f"crop={ancho}:{alto}"
+    )
+
+
 def _filtro(ancho: int, alto: int) -> str:
     """Grafo de filtros: el video se duplica en fondo y frente. El fondo se agranda
     hasta cubrir el lienzo vertical, se recorta y se difumina; el frente se escala
@@ -60,17 +81,25 @@ def to_vertical(
     *,
     ancho: int = _ANCHO,
     alto: int = _ALTO,
+    modo: str = MODO_MARCO,
     timeout: int = 300,
 ) -> bool:
     """Reencuadra `entrada` a `ancho` x `alto` y lo escribe en `salida`.
 
+    `modo`: MODO_MARCO (banda + fondo difuminado) o MODO_RECORTE (pantalla
+    completa, corta los costados). Ver el docstring del modulo por el compromiso.
+
     Devuelve True si ffmpeg terminó bien. No lanza: ante fallo loguea y devuelve
     False, para que el llamador pueda degradar a entregar el video original."""
+    if modo == MODO_RECORTE:
+        filtro = ["-vf", _filtro_recorte(ancho, alto)]
+    else:
+        filtro = ["-filter_complex", _filtro(ancho, alto)]
     cmd = [
         ffmpeg_exe(),
         "-y",
         "-i", entrada,
-        "-filter_complex", _filtro(ancho, alto),
+        *filtro,
         "-c:v", "libx264",
         "-preset", "veryfast",
         "-crf", "20",

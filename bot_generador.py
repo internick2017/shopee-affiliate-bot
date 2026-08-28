@@ -25,7 +25,7 @@ from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.user_credentials_store import UserCredentialsStore
-from src.video_vertical import to_vertical
+from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("bot-generador")
@@ -192,17 +192,25 @@ async def _handle_video_vertical(update: Update, context: ContextTypes.DEFAULT_T
         archivo = await context.bot.get_file(media.file_id)
         await archivo.download_to_drive(custom_path=str(entrada))
 
-        if not to_vertical(str(entrada), str(salida)):
-            await update.message.reply_text(_MSG_VIDEO_FALLO)
-            return
+        # Los dos modos, para comparar con el mismo video y decidir con evidencia.
+        variantes = [
+            (MODO_RECORTE, "recorte", "pantalla completa, corta los costados"),
+            (MODO_MARCO, "marco", "video entero, con fondo difuminado"),
+        ]
+        enviados = 0
+        for modo, nombre, descripcion in variantes:
+            destino = Path(tmp) / f"{nombre}.mp4"
+            if not to_vertical(str(entrada), str(destino), modo=modo):
+                continue
+            await update.message.reply_document(
+                document=destino.read_bytes(),
+                filename=f"vertical-{nombre}.mp4",
+                caption=f"{nombre.upper()}: {descripcion}",
+            )
+            enviados += 1
 
-        # Como documento: mandarlo como video deja que Telegram lo recomprima, y
-        # este archivo va derecho a subirse a Shopee Video.
-        await update.message.reply_document(
-            document=salida.read_bytes(),
-            filename="vertical-9x16.mp4",
-            caption="Listo, 1080x1920. Subilo así a Shopee Video.",
-        )
+        if not enviados:
+            await update.message.reply_text(_MSG_VIDEO_FALLO)
 
 
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -5,7 +5,13 @@ import subprocess
 
 import pytest
 
-from src.video_vertical import ffmpeg_exe, medidas, to_vertical
+from src.video_vertical import (
+    MODO_MARCO,
+    MODO_RECORTE,
+    ffmpeg_exe,
+    medidas,
+    to_vertical,
+)
 
 
 def _video_horizontal(destino, ancho=640, alto=360, segundos=1) -> str:
@@ -50,3 +56,25 @@ def test_medidas_de_archivo_invalido_es_none(tmp_path):
     roto = tmp_path / "roto.mp4"
     roto.write_bytes(b"esto no es un video")
     assert medidas(str(roto)) is None
+
+
+# --- modo recorte ---
+
+def test_recorte_tambien_da_9_16(horizontal, tmp_path):
+    salida = str(tmp_path / "recorte.mp4")
+    assert to_vertical(horizontal, salida, ancho=270, alto=480, modo=MODO_RECORTE) is True
+    assert medidas(salida) == (270, 480)
+
+
+def test_los_dos_modos_producen_las_mismas_medidas(horizontal, tmp_path):
+    a, b = str(tmp_path / "a.mp4"), str(tmp_path / "b.mp4")
+    to_vertical(horizontal, a, ancho=270, alto=480, modo=MODO_MARCO)
+    to_vertical(horizontal, b, ancho=270, alto=480, modo=MODO_RECORTE)
+    assert medidas(a) == medidas(b) == (270, 480)
+
+
+def test_modo_desconocido_cae_en_marco(horizontal, tmp_path):
+    """Degradacion segura: un modo mal escrito no debe romper la conversion."""
+    salida = str(tmp_path / "raro.mp4")
+    assert to_vertical(horizontal, salida, ancho=270, alto=480, modo="inventado") is True
+    assert medidas(salida) == (270, 480)
