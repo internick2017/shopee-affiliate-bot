@@ -293,6 +293,15 @@ async def _handle_ventas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"R$ {banda.comision:.2f} (R$ {banda.por_item:.2f} c/u)"
         )
 
+    if v.origenes:
+        lineas.append("")
+        lineas.append("<b>Por origen del click</b>")
+        for o in v.origenes:
+            lineas.append(
+                f"{o.etiqueta}: {o.items} vendidos, {o.tasa_pct:.1f}% real "
+                f"(R$ {o.comision:.2f})"
+            )
+
     lineas.append("")
     lineas.append("<b>Los que mas dejaron</b>")
     for nombre, com in v.top:
