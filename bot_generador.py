@@ -104,11 +104,17 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     await update.message.reply_text("Armando la referencia vertical, dame unos segundos...")
 
+    texto = update.message.text or ""
+    # "nativo" al final = el generador ya produce 9:16 (Google Flow), no hace falta
+    # componer para un recorte posterior.
+    nativo = texto.strip().lower().endswith("nativo")
+
     ref = generate_video_reference(
-        update.message.text or "",
+        texto,
         cfg["shopee_app_id"],
         cfg["shopee_secret"],
         user_credentials=context.bot_data["credentials_store"].get(user.id),
+        nativo=nativo,
     )
 
     if ref.error:
@@ -125,6 +131,16 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # El prompt va aparte: no entra en un caption (tope 1024) y suelto se copia
     # de un toque en el celular.
     await update.message.reply_text(ref.prompt)
+
+    # El link se guarda y se muestra: entre pedir la referencia y volver con el
+    # video generado pasan minutos en otra app, y sin esto el link se pierde.
+    if ref.link:
+        context.bot_data.setdefault("ultimo_link", {})[user.id] = ref.link
+        modo = "vertical nativo (Flow)" if nativo else "para reencuadrar despues"
+        await update.message.reply_text(
+            f"Prompt {modo}.\n\nLink del producto:\n{ref.link}",
+            disable_web_page_preview=True,
+        )
 
 
 async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -214,6 +230,16 @@ async def _handle_video_vertical(update: Update, context: ContextTypes.DEFAULT_T
 
         if not enviados:
             await update.message.reply_text(_MSG_VIDEO_FALLO)
+            return
+
+        # Devolver el link del ultimo producto pedido: el usuario vuelve aca con
+        # el video minutos despues y para entonces ya no lo tiene a mano.
+        link = context.bot_data.get("ultimo_link", {}).get(update.effective_user.id)
+        if link:
+            await update.message.reply_text(
+                f"Link del producto de tu ultima referencia:\n{link}",
+                disable_web_page_preview=True,
+            )
 
 
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

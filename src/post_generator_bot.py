@@ -90,6 +90,34 @@ _ERROR_SIN_FOTO = (
 #    reencuadre que quedo mejor es el recorte, que se queda solo con la franja
 #    central del video horizontal. Todo lo que se vaya a los costados se pierde,
 #    asi que el encuadre del video generado tiene que anticipar ese recorte.
+# Variante para generadores que YA producen 9:16 nativo (Google Flow tiene el
+# control de formato que la app de Gemini no expone). Ahi el video no se recorta
+# despues, asi que la restriccion de "todo en la franja central" sobra: le estaria
+# limitando la composicion al modelo por un motivo que no aplica. Lo que SI se
+# mantiene es sacar el texto quemado en la foto del vendedor, que es independiente
+# del formato.
+_PROMPT_VIDEO_NATIVO = """Anime esta imagem de referência em um vídeo publicitário
+vertical de 10 segundos.
+
+PRODUTO:
+Idêntico ao da imagem: mesmo formato, cores, materiais, proporções e detalhes.
+REMOVA todo o texto, setas, selos e marcas d'água que apareçam na imagem de
+referência. O produto deve aparecer limpo, sem nenhuma palavra sobre ele.
+O produto deve ocupar boa parte do quadro e ficar sempre bem visível.
+
+RITMO:
+0-3s: o produto em destaque.
+3-7s: detalhes do produto ou o produto em uso.
+7-10s: enquadramento final claro do produto.
+
+Movimentos suaves de câmera e zoom leve. Fotorrealista, iluminação profissional,
+movimento natural.
+
+NÃO adicione texto novo, logotipos, pessoas, animais nem objetos novos.
+NÃO mostre telefone, moldura, tela ou interface de aplicativo.
+NÃO mostre crianças ou bebês."""
+
+
 _PROMPT_VIDEO = """Anime esta imagem de referência em um vídeo publicitário de 10 segundos.
 
 ENQUADRAMENTO - O MAIS IMPORTANTE:
@@ -132,6 +160,7 @@ class VideoReference:
     image_bytes: bytes | None = None
     caption: str | None = None
     prompt: str | None = None
+    link: str | None = None
     filename: str | None = None
     error: str | None = None
 
@@ -142,12 +171,16 @@ def generate_video_reference(
     secret: str,
     *,
     user_credentials: tuple[str, str] | None = None,
+    nativo: bool = False,
     http_get: Callable[..., object] | None = None,
     http_post: Callable[..., object] | None = None,
     fetch_image: Callable[[str], bytes] | None = None,
 ) -> VideoReference:
     """Resuelve el link de Shopee, baja la foto del producto y devuelve el lienzo
     vertical 1080x1920 con el prompt de video.
+
+    `nativo`: True si el generador produce 9:16 por si mismo (Flow), False si la
+    salida se va a reencuadrar despues. Cambia el prompt, no la imagen.
 
     `fetch_image` se inyecta para los tests; por defecto baja con `requests`."""
     links = extract_shopee_shortlinks(text)
@@ -177,7 +210,8 @@ def generate_video_reference(
     return VideoReference(
         image_bytes=build_vertical_canvas(raw),
         caption=offer.titulo,
-        prompt=_PROMPT_VIDEO,
+        prompt=_PROMPT_VIDEO_NATIVO if nativo else _PROMPT_VIDEO,
+        link=offer.link_propio,
         filename="referencia-9x16.jpg",
     )
 

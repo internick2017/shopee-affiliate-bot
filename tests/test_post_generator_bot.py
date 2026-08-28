@@ -248,3 +248,26 @@ def test_referencia_no_exige_descuento():
     ref = _generar_referencia("https://s.shopee.com.br/abc123", http_post=_fake_post(body))
     assert ref.error is None
     assert ref.image_bytes
+
+
+def test_variante_nativa_no_habla_de_recorte():
+    """Con generacion 9:16 nativa no hay recorte posterior: la restriccion de
+    'todo en la franja central' limitaria la composicion sin motivo."""
+    normal = _generar_referencia("https://s.shopee.com.br/abc123")
+    nativo = _generar_referencia("https://s.shopee.com.br/abc123 nativo", nativo=True)
+    assert "recortado" in normal.prompt
+    assert "recortado" not in nativo.prompt
+    assert normal.prompt != nativo.prompt
+
+
+def test_las_dos_variantes_sacan_el_texto():
+    """Independiente del formato: el texto quemado molesta igual en los dos."""
+    for nat in (False, True):
+        ref = _generar_referencia("https://s.shopee.com.br/abc123", nativo=nat)
+        assert "REMOVA todo o texto" in ref.prompt
+
+
+def test_referencia_devuelve_el_link_del_producto():
+    """Sin esto el link se pierde entre pedir la referencia y volver con el video."""
+    ref = _generar_referencia("https://s.shopee.com.br/abc123")
+    assert ref.link == "https://s.shopee.com.br/propio"

@@ -91,7 +91,8 @@ En chat privado, un usuario de `BOT_ALLOWED_USERS` puede:
 |---|---|
 | un link de Shopee | el post armado (foto + caption con su link de afiliado) |
 | `/ideas <categoria o palabra>` | top 5 productos para grabar, ranqueados por comision, ventas, rating y precio |
-| `/video <link>` | la imagen 9:16 de referencia + el prompt para el generador de video |
+| `/video <link>` | la imagen 9:16 de referencia + el prompt + el link del producto |
+| `/video <link> nativo` | igual, pero con el prompt para generadores que ya producen 9:16 (Google Flow) |
 | un archivo de video | el mismo video en 1080x1920, en sus dos versiones: RECORTE (pantalla completa, corta los costados) y MARCO (video entero con fondo difuminado) |
 | `/registrar_shopee <app_id> <secret>` | guarda sus credenciales propias |
 | `/olvidar_shopee` | las borra |
