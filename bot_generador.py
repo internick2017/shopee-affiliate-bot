@@ -24,6 +24,7 @@ from src.config import load_config
 from src.post_builder import HookBank
 from src.post_generator_bot import generate_post_reply, generate_video_reference
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
+from src.sales_report import resumen_ventas
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
 
@@ -141,6 +142,64 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"Prompt {modo}.\n\nLink del producto:\n{ref.link}",
             disable_web_page_preview=True,
         )
+
+
+async def _handle_ventas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/ventas [dias]` — que se vendio de verdad con los links del canal.
+
+    Es el contraste de `/ideas`: sin esto el ranking es una teoria que nunca se
+    verifica contra la realidad."""
+    cfg = context.bot_data["cfg"]
+
+    user = _check_access(update, context)
+    if user is None:
+        await update.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    dias = 30
+    if context.args and context.args[0].isdigit():
+        dias = max(1, min(int(context.args[0]), 180))
+
+    await update.message.reply_text(f"Leyendo tus ventas de los ultimos {dias} dias...")
+
+    app_id, secret = context.bot_data["credentials_store"].get(user.id) or (
+        cfg["shopee_app_id"],
+        cfg["shopee_secret"],
+    )
+    v = resumen_ventas(app_id, secret, dias=dias)
+    if v.error:
+        await update.message.reply_text(v.error)
+        return
+    if not v.completados:
+        await update.message.reply_text(
+            f"No hay ventas completadas en los ultimos {dias} dias."
+        )
+        return
+
+    lineas = [
+        f"<b>Ultimos {v.dias} dias</b>",
+        f"Comision: <b>R$ {v.comision:.2f}</b> en {v.completados} ventas",
+        f"Promedio por venta: R$ {v.por_venta:.2f}",
+    ]
+    if v.cancelados or v.pendientes:
+        lineas.append(f"({v.cancelados} canceladas, {v.pendientes} pendientes, no contadas)")
+
+    lineas.append("")
+    lineas.append("<b>Por banda de precio</b>")
+    for banda in v.bandas:
+        lineas.append(
+            f"{banda.etiqueta}: {banda.items} vendidos, "
+            f"R$ {banda.comision:.2f} (R$ {banda.por_item:.2f} c/u)"
+        )
+
+    lineas.append("")
+    lineas.append("<b>Los que mas dejaron</b>")
+    for nombre, com in v.top:
+        lineas.append(f"R$ {com:.2f} - {nombre}")
+
+    await update.message.reply_text(
+        "\n".join(lineas), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+    )
 
 
 async def _handle_ideas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -296,6 +355,7 @@ def main() -> None:
     application.add_handler(CommandHandler("olvidar_shopee", _handle_olvidar_shopee))
     application.add_handler(CommandHandler("video", _handle_video))
     application.add_handler(CommandHandler("ideas", _handle_ideas))
+    application.add_handler(CommandHandler("ventas", _handle_ventas))
     application.add_handler(
         MessageHandler(
             (filters.VIDEO | filters.Document.VIDEO) & filters.ChatType.PRIVATE,

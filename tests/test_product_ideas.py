@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from src.product_ideas import (
     _PESO_VENTAS,
+    _firma,
+    retorno_por_venta,
     CATEGORIAS,
     buscar_ideas,
     puntuar,
@@ -52,10 +54,26 @@ def test_rating_bajo_no_suma():
            puntuar(comision_pct=10, ventas=100, rating=4.0, precio=20)
 
 
-def test_precio_caro_penaliza():
-    barato = puntuar(comision_pct=10, ventas=100, rating=4.5, precio=25)
-    caro = puntuar(comision_pct=10, ventas=100, rating=4.5, precio=300)
+def test_a_igual_retorno_gana_el_barato():
+    """Sigue habiendo preferencia por la compra por impulso: con los mismos reales
+    por venta, el mas barato convierte mas seguido."""
+    barato = puntuar(comision_pct=40, ventas=100, rating=4.5, precio=25)   # R$10
+    caro = puntuar(comision_pct=10, ventas=100, rating=4.5, precio=100)    # R$10
     assert barato > caro
+
+
+def test_un_caro_rentable_le_gana_a_un_barato_pobre():
+    """Corregido con las ventas reales de Nick: los items de R$80+ son el 8% de
+    las ventas pero el 24% de la comision. La formula vieja los ponia en cero."""
+    pobre = puntuar(comision_pct=8, ventas=1000, rating=4.5, precio=10)    # R$0,80
+    rentable = puntuar(comision_pct=12, ventas=1000, rating=4.5, precio=120)  # R$14,40
+    assert rentable > pobre
+
+
+def test_el_factor_precio_nunca_es_cero():
+    """La version anterior descartaba de plano todo lo de mas de R$80."""
+    carisimo = puntuar(comision_pct=20, ventas=5000, rating=4.9, precio=5000)
+    assert carisimo > 0.3
 
 
 def test_puntaje_esta_entre_0_y_1():
@@ -128,3 +146,43 @@ def test_fallo_de_red_devuelve_vacio():
 def test_convierte_comision_a_porcentaje():
     r = buscar_ideas("limpeza", "a", "s", http_post=_post([_nodo("x", comision="0.135")]))
     assert r[0].comision_pct == Decimal("13.500")
+
+
+# --- variedad ---
+
+def test_no_repite_el_mismo_producto():
+    """El caso real: /ideas limpeza devolvia cinco Percarbonatos casi iguales."""
+    nodos = [
+        _nodo("Percarbonato 100% Puro Tira Manchas", comision="0.20"),
+        _nodo("Percarbonato de Sodio 100% Puro Limpeza", comision="0.19"),
+        _nodo("Percarbonato Puro 1kg Roupas", comision="0.18"),
+        _nodo("Jogo de Lencol 400 Fios", comision="0.17"),
+        _nodo("Fita Dupla Face Nano", comision="0.16"),
+    ]
+    r = buscar_ideas("limpeza", "a", "s", cuantas=3, http_post=_post(nodos))
+    firmas = {_firma(i.titulo) for i in r}
+    assert len(firmas) == 3
+    assert "percarbonato" in firmas
+
+
+def test_la_variedad_no_devuelve_de_menos():
+    """Si no hay suficientes productos distintos, completa con los repetidos:
+    devolver 2 cuando se pidieron 5 seria peor que devolver algo parecido."""
+    nodos = [_nodo(f"Percarbonato variante {i}") for i in range(6)]
+    assert len(buscar_ideas("limpeza", "a", "s", cuantas=5, http_post=_post(nodos))) == 5
+
+
+def test_la_firma_ignora_palabras_de_relleno():
+    assert _firma("Kit de 3 Pecas Organizador") == _firma("Organizador Multiuso Premium")
+
+
+def test_el_mejor_puntaje_sigue_primero():
+    """La variedad reordena descartando, no promoviendo: el numero uno no cambia."""
+    nodos = [_nodo("Alfa", comision="0.02", ventas=10, precio="300"),
+             _nodo("Beta", comision="0.25", ventas=9000, precio="25")]
+    assert buscar_ideas("limpeza", "a", "s", http_post=_post(nodos))[0].titulo == "Beta"
+
+
+def test_retorno_por_venta_es_precio_por_comision():
+    assert retorno_por_venta(50.0, 10.0) == 5.0
+    assert retorno_por_venta(0.0, 99.0) == 0.0

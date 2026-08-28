@@ -26,17 +26,30 @@ from decimal import Decimal
 
 from .shopee_resolver import _graphql_call
 
-# Peso de cada factor en el puntaje. Comisión arriba de ventas a propósito: el
-# producto más vendido suele ser el más saturado y el que peor paga.
-_PESO_COMISION = 0.40
+# Peso de cada factor. El principal es el RETORNO (reales por venta), no la
+# comisión en porcentaje: un 30% sobre R$8 deja menos que un 12% sobre R$60, y la
+# version anterior de esta formula no lo veia porque miraba el porcentaje suelto.
+#
+# Medido sobre las ventas reales de Nick (90 dias, 73 items completados): la
+# comision por venta sube con el precio — R$1,48 por item hasta R$20, R$3,35 entre
+# R$20 y R$50, R$5,17 entre R$50 y R$80, R$14,67 arriba de R$150. Los items de
+# R$80+ son el 8% de las ventas pero el 24% de la comision.
+#
+# OJO con esa medicion: tiene sesgo de seleccion. El canal postea sobre todo
+# productos baratos, asi que la muestra esta cargada de baratos. Dice que un caro
+# PAGA mas cuando se vende, no que convierta mas seguido. Por eso el precio sigue
+# teniendo una preferencia por lo barato, pero suave: la version anterior ponia
+# CERO arriba de R$80 y borraba de plano la banda mas rentable.
+_PESO_RETORNO = 0.35
 _PESO_VENTAS = 0.30
+_PESO_PRECIO = 0.20
 _PESO_RATING = 0.15
-_PESO_PRECIO = 0.15
 
-_COMISION_TECHO_PCT = 20.0   # arriba de esto el factor satura en 1
+_RETORNO_TECHO = 8.0         # R$ por venta; la mediana real de Nick es R$2,07
 _VENTAS_TECHO_LOG = 5.0      # log10(100000): 100k ventas satura el factor
 _PRECIO_IMPULSO = 30.0       # hasta acá, compra por impulso plena
-_PRECIO_TECHO = 80.0         # arriba de acá el factor precio es 0
+_PRECIO_CARO = 150.0         # de acá en adelante el factor no baja más
+_PRECIO_PISO = 0.35          # nunca 0: un caro rentable no debe quedar descartado
 
 # Nombre real de cada categoría de nivel 1. Importa mostrarlo: los alias de abajo
 # son más específicos que la categoría (un alias "limpeza" cae en toda la categoría
@@ -129,25 +142,86 @@ def nombre_categoria(texto: str) -> str | None:
     return NOMBRES.get(cat_id) if cat_id is not None else None
 
 
+def retorno_por_venta(precio: float, comision_pct: float) -> float:
+    """Reales que deja cada venta. Es lo que realmente entra al bolsillo, y por eso
+    reemplaza al porcentaje de comision suelto como factor principal."""
+    return max(0.0, precio) * max(0.0, comision_pct) / 100
+
+
 def puntuar(*, comision_pct: float, ventas: int, rating: float, precio: float) -> float:
     """Puntaje 0..1. Cada factor se normaliza aparte y después se pondera.
 
     Las ventas van en escala logarítmica porque van de decenas a decenas de miles:
     en escala lineal, un solo éxito masivo aplastaría a todos los demás factores."""
-    f_comision = min(comision_pct / _COMISION_TECHO_PCT, 1.0)
+    f_retorno = min(retorno_por_venta(precio, comision_pct) / _RETORNO_TECHO, 1.0)
     f_ventas = min(math.log10(1 + max(ventas, 0)) / _VENTAS_TECHO_LOG, 1.0)
     # El rating útil vive entre 4 y 5 estrellas; abajo de 4 el factor es 0.
     f_rating = max(0.0, min((rating - 4.0), 1.0))
+    # Preferencia por lo barato, pero con piso: los caros pagan mejor por venta y
+    # descartarlos de plano fue el error de la version anterior.
     if precio <= _PRECIO_IMPULSO:
         f_precio = 1.0
+    elif precio >= _PRECIO_CARO:
+        f_precio = _PRECIO_PISO
     else:
-        f_precio = max(0.0, (_PRECIO_TECHO - precio) / (_PRECIO_TECHO - _PRECIO_IMPULSO))
+        avance = (precio - _PRECIO_IMPULSO) / (_PRECIO_CARO - _PRECIO_IMPULSO)
+        f_precio = 1.0 - avance * (1.0 - _PRECIO_PISO)
     return (
-        _PESO_COMISION * f_comision
+        _PESO_RETORNO * f_retorno
         + _PESO_VENTAS * f_ventas
         + _PESO_RATING * f_rating
         + _PESO_PRECIO * f_precio
     )
+
+
+# Palabras que aparecen en casi cualquier titulo y no distinguen un producto de
+# otro: si entraran en la firma, dos productos distintos pareceran el mismo.
+_RUIDO = {
+    "kit", "de", "da", "do", "para", "com", "sem", "e", "em", "a", "o", "os", "as",
+    "un", "uma", "por", "pcs", "pecas", "unidades", "und", "un", "novo", "nova",
+    "original", "premium", "profissional", "top", "promocao", "frete", "gratis",
+}
+
+
+def _firma(titulo: str) -> str:
+    """Identidad aproximada de un producto, para no ofrecer cinco veces lo mismo.
+
+    Es la PRIMERA palabra significativa del titulo. En Shopee los titulos arrancan
+    por el tipo de producto y siguen con adjetivos y medidas, asi que esa palabra
+    sola alcanza para agrupar variantes: "Percarbonato 100% Puro Tira Manchas..."
+    y "Percarbonato de Sodio 100% Puro Limpeza..." comparten firma.
+
+    Con dos palabras NO funcionaba: esos dos daban "percarbonato puro" y
+    "percarbonato sodio", firmas distintas para el mismo producto. Una sola palabra
+    agrupa de mas en algun caso (dos limpiadores distintos comparten "limpador"),
+    pero para VARIEDAD agrupar de mas es el error barato."""
+    palabras = []
+    for bruta in _normalizar(titulo).replace("/", " ").replace("-", " ").split():
+        limpia = "".join(c for c in bruta if c.isalpha())
+        if len(limpia) >= 3 and limpia not in _RUIDO:
+            palabras.append(limpia)
+        if palabras:
+            break
+    return " ".join(palabras) or _normalizar(titulo)[:12]
+
+
+def _variar(ideas: list["Idea"], cuantas: int) -> list["Idea"]:
+    """Toma las mejores `cuantas` evitando repetir el mismo producto.
+
+    Recorre en orden de puntaje y saltea las firmas ya vistas. Si con eso no
+    alcanza, completa con las mejores descartadas: es preferible devolver algo
+    parecido a devolver menos de lo pedido."""
+    elegidas, vistas, sobrantes = [], set(), []
+    for idea in ideas:
+        f = _firma(idea.titulo)
+        if f in vistas:
+            sobrantes.append(idea)
+            continue
+        vistas.add(f)
+        elegidas.append(idea)
+        if len(elegidas) == cuantas:
+            return elegidas
+    return (elegidas + sobrantes)[:cuantas]
 
 
 def _a_idea(nodo: dict) -> Idea | None:
@@ -209,4 +283,4 @@ def buscar_ideas(
     nodos = ((data.get("productOfferV2") or {}).get("nodes")) or []
     ideas = [i for i in (_a_idea(n) for n in nodos) if i is not None]
     ideas.sort(key=lambda i: i.puntaje, reverse=True)
-    return ideas[:cuantas]
+    return _variar(ideas, cuantas)
