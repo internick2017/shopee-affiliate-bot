@@ -1,6 +1,6 @@
-"""Genera `assets/watermark.png`: ícono de bolsa + rayo y el texto "OFERTAS LANNY",
-en un PNG con fondo transparente, para pegarlo como marca de agua sobre los videos
-verticales (ver `src/video_vertical.py`).
+"""Genera `assets/watermark.png`: ícono de bolsa + rayo y el usuario de Shopee de
+Lanny (@lannyherrera), en un PNG con fondo transparente, para pegarlo como marca
+de agua sobre los videos verticales (ver `src/video_vertical.py`).
 
 Se corre a mano cuando hay que regenerar el watermark (cambio de texto, tamaño,
 etc.) — no en cada build. `python scripts/build_watermark.py`.
@@ -32,7 +32,7 @@ def _fuente(tam: int) -> ImageFont.FreeTypeFont:
 
 def main() -> None:
     fuente = _fuente(22)
-    texto = "OFERTAS LANNY"
+    texto = "@lannyherrera"
 
     tmp = Image.new("RGBA", (1, 1))
     medidas = ImageDraw.Draw(tmp).textbbox((0, 0), texto, font=fuente)
