@@ -10,6 +10,7 @@
 
 # Estado local
 *.db
+*.lock
 *.sqlite
 *.sqlite3
 
@@ -23,6 +24,7 @@ venv/
 
 # Logs / observación
 *.log
+logs/
 observations*.jsonl
 mensajes_*.txt
 diagnostico_*_out.txt

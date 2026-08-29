@@ -32,8 +32,10 @@ COMANDOS: tuple[Comando, ...] = (
             "/ideas limpeza"),
     Comando("tendencia", "Que esta despegando AHORA, no lo que vendio siempre",
             "/tendencia 7"),
-    Comando("video", "Referencia vertical 9:16 + prompt, a partir de un link",
-            "/video <link> nativo"),
+    # Los modificadores son opcionales y se combinan: sin ninguno sale sin
+    # personas, que es lo que mejor genera la IA.
+    Comando("video", "Referencia 9:16 + prompt. Agregale: nativo, manos, personas",
+            "/video <link> manos"),
     Comando("ventas", "Cuanto entro de verdad, por banda de precio y por origen",
             "/ventas 90"),
     Comando("grabados", "Productos que ya usaste para video y no se repiten"),

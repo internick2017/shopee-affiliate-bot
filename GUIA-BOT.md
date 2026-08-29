@@ -75,6 +75,23 @@ La diferencia está en el texto que te da. La versión `nativo` es para cuando e
 generador ya hace el video vertical. La otra le pide al generador que mantenga el
 producto bien al centro, porque después hay que recortar el video.
 
+**Quién aparece en el video.** Por defecto no aparece nadie, solo el producto
+funcionando (la parrilla con la carne asándose, el organizador con la ropa
+adentro). Si querés que se vea alguien usándolo, agregá una palabra más:
+
+| Cómo lo escribís | Qué te da |
+|---|---|
+| `/video <link>` | Solo el producto, sin personas |
+| `/video <link> manos` | Manos usando el producto, sin caras |
+| `/video <link> personas` | Una persona adulta usándolo |
+
+Se combinan: `/video <link> nativo manos` es válido, y da lo mismo el orden.
+
+Un aviso honesto sobre `manos` y `personas`: es justo donde más falla la IA. Vas
+a tener que descartar más videos, sobre todo dedos raros. Si el producto se
+entiende sin que nadie lo toque, te conviene el modo por defecto. En videos de
+niños o bebés el bot nunca los va a generar, esté como esté el pedido.
+
 ### `/tendencia`
 
 Qué productos están **subiendo ahora**. Es distinto de `/ideas`: ahí ves lo que
@@ -153,7 +170,10 @@ Para borrarlas: `/olvidar_shopee`
 
 ## Si algo no funciona
 
-**El bot no responde.** Puede estar apagado. Avisale a Nick.
+**El bot no responde.** Desde el 29/08/2026 los bots arrancan solos con la
+computadora y se levantan solos si se caen, así que esto tendría que ser raro. Si
+igual no contesta, esperá 2 minutos: ese es el tiempo que tarda Windows en
+revivirlo. Si después de 2 minutos sigue mudo, avisale a Nick.
 
 **"Ese video pesa más de 20 MB."** Telegram no deja mandarle archivos más grandes
 al bot. Generá el video más corto o con menor calidad.

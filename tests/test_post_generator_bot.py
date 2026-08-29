@@ -300,3 +300,93 @@ def test_reply_lleva_el_aviso_de_rango_para_lanny():
     r = BotReply(caption="post", photo_url="http://x", aviso="⚠️ hay variaciones")
     assert "variaciones" in r.aviso
     assert "variaciones" not in r.caption
+
+
+# --- Personas en el video y objetos de uso -----------------------------------
+#
+# El prompt original prohibia "objetos novos" y a la vez pedia "o produto em uso":
+# para una churrasqueira eso es imposible (la carne y el humo SON objetos nuevos),
+# y el modelo devolvia el producto girando en el vacio. Son dos reglas distintas
+# que estaban mezcladas en una: los objetos que el producto necesita para cumplir
+# su funcion siempre van; las personas son una decision aparte, por comando.
+
+_LINK = "https://s.shopee.com.br/abc123"
+
+
+def test_por_defecto_no_muestra_personas():
+    """El default se mantiene sin personas: las manos son lo que peor genera la IA."""
+    ref = _generar_referencia(_LINK)
+    assert "NÃO mostre pessoas" in ref.prompt
+    assert "mãos" in ref.prompt
+
+
+def test_modo_manos_permite_manos_pero_no_caras():
+    ref = _generar_referencia(_LINK, personas="manos")
+    assert "MÃOS" in ref.prompt
+    assert "NÃO mostre rostos" in ref.prompt
+    assert "NÃO mostre pessoas" not in ref.prompt
+
+
+def test_modo_personas_permite_una_persona_sin_testimonio():
+    """Una persona inventada hablando a camara se lee como testimonio falso."""
+    ref = _generar_referencia(_LINK, personas="personas")
+    assert "UMA pessoa adulta" in ref.prompt
+    assert "depoimento" in ref.prompt
+
+
+def test_ninos_prohibidos_en_las_tres_variantes():
+    """Regla dura, no configurable: ningun modificador puede levantarla."""
+    for modo in (None, "manos", "personas"):
+        ref = _generar_referencia(_LINK, personas=modo)
+        assert "NÃO mostre crianças ou bebês" in ref.prompt, modo
+
+
+def test_siempre_permite_los_objetos_que_el_producto_necesita():
+    """El bug que motivo el cambio: sin esto la parrilla sale sin carne ni humo."""
+    for modo in (None, "manos", "personas"):
+        for nativo in (False, True):
+            ref = _generar_referencia(_LINK, personas=modo, nativo=nativo)
+            assert "FUNCIONANDO" in ref.prompt, (modo, nativo)
+            assert "objetos novos" not in ref.prompt, (modo, nativo)
+
+
+def test_personas_y_nativo_se_combinan():
+    """Son dos ejes independientes: formato y personas."""
+    ref = _generar_referencia(_LINK, personas="manos", nativo=True)
+    assert "MÃOS" in ref.prompt
+    assert "recortado" not in ref.prompt
+
+
+def test_las_reglas_compartidas_siguen_en_todas_las_variantes():
+    """El refactor a bloques no debe perder nada del prompt original."""
+    for modo in (None, "manos", "personas"):
+        for nativo in (False, True):
+            ref = _generar_referencia(_LINK, personas=modo, nativo=nativo)
+            for esperado in ("REMOVA todo o texto", "NARRAÇÃO", "NÃO invente informações",
+                             "NÃO mostre telefone", "10 segundos"):
+                assert esperado in ref.prompt, (esperado, modo, nativo)
+
+
+# --- Parseo de los modificadores del comando ---------------------------------
+
+def test_modificadores_del_comando():
+    """Antes el modo se detectaba con endswith("nativo"), que se rompe apenas hay
+    dos modificadores: "/video <link> nativo manos" ya no termina en "nativo"."""
+    from src.post_generator_bot import CON_MANOS, CON_PERSONAS, SIN_PERSONAS, leer_modificadores
+
+    assert leer_modificadores(f"/video {_LINK}") == (False, SIN_PERSONAS)
+    assert leer_modificadores(f"/video {_LINK} nativo") == (True, SIN_PERSONAS)
+    assert leer_modificadores(f"/video {_LINK} manos") == (False, CON_MANOS)
+    assert leer_modificadores(f"/video {_LINK} personas") == (False, CON_PERSONAS)
+    # En cualquier orden, y sin importar mayusculas o acentos.
+    assert leer_modificadores(f"/video {_LINK} nativo manos") == (True, CON_MANOS)
+    assert leer_modificadores(f"/video {_LINK} MANOS nativo") == (True, CON_MANOS)
+    assert leer_modificadores(f"/video {_LINK} mãos") == (False, CON_MANOS)
+
+
+def test_una_palabra_cualquiera_no_activa_nada():
+    """Si escribe algo que no es un modificador, vale el default: no se le puede
+    colar una persona al video por una palabra suelta."""
+    from src.post_generator_bot import SIN_PERSONAS, leer_modificadores
+
+    assert leer_modificadores(f"/video {_LINK} porfa") == (False, SIN_PERSONAS)

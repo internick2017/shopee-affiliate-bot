@@ -27,6 +27,8 @@ from src.channel_poster import ChannelPoster
 from src.config import load_config
 from src.dedup_store import DedupStore
 from src.image_watermark import strip_watermark_from_media
+from src.instancia_unica import ya_hay_otra_instancia
+from src.logging_setup import configurar_logging
 from src.mercadolivre_review import MercadoLivreReviewPipeline
 from src.offer_pipeline import OfferPipeline
 from src.post_builder import HookBank
@@ -37,8 +39,9 @@ from src.telegram_listener import TelethonConfig, TelethonListener
 # 2026-08-01, ver src/image_watermark.py). Si mañana aparece otra, sumarla acá.
 _WATERMARKED_SOURCES = ("promocasinha",)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("ofertas-bot")
+# A archivo ademas de pantalla: el bot corre oculto como tarea programada,
+# asi que sin esto un crash de madrugada no deja ningun rastro.
+logger = configurar_logging("ofertas-bot", "logs/ofertas.log")
 
 
 def _is_numeric(value) -> bool:
@@ -211,4 +214,11 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    # La tarea programada reintenta arrancar el bot cada 2 minutos. Sin este
+    # candado, un bot ya vivo lanzado por otra via terminaria duplicado, y eso
+    # publica todo dos veces. Ver src/instancia_unica.py.
+    if ya_hay_otra_instancia("ofertas"):
+        logger.warning("Ya hay otra instancia corriendo. Este proceso no arranca.")
+        raise SystemExit(0)
+
     asyncio.run(main())

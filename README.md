@@ -97,6 +97,7 @@ En chat privado, un usuario de `BOT_ALLOWED_USERS` puede:
 | `/olvidar_video <id>` | permite volver a ofrecer un producto ya grabado |
 | `/video <link>` | la imagen 9:16 de referencia + el prompt + el link del producto |
 | `/video <link> nativo` | igual, pero con el prompt para generadores que ya producen 9:16 (Google Flow) |
+| `/video <link> manos` \| `personas` | permite manos (sin caras) o una persona adulta en el video; sin nada, nadie. Se combina con `nativo` |
 | un archivo de video | el mismo video en 1080x1920, en sus dos versiones: RECORTE (pantalla completa, corta los costados) y MARCO (video entero con fondo difuminado) |
 | `/registrar_shopee <app_id> <secret>` | guarda sus credenciales propias |
 | `/olvidar_shopee` | las borra |
@@ -105,9 +106,41 @@ El formato de salida de Veo es un parametro de generacion (`aspect_ratio`, defau
 16:9) que la app de Gemini no expone, por eso el video se reencuadra despues en vez
 de pedirlo por prompt.
 
-En Windows, sin ventana visible: `iniciar-bot-ofertas-oculto.vbs` (o
-`iniciar-todo-oculto.vbs` para arrancar tambien el bot generador de posts).
-Para pararlos: `detener-bots-ocultos.vbs`.
+### 24/7 en Windows (tareas programadas)
+
+Los bots corren como tareas programadas: arrancan solos al iniciar sesion y se
+vuelven a levantar solos si se caen.
+
+```bash
+powershell -ExecutionPolicy Bypass -File instalar-tareas.ps1               # instalar
+powershell -ExecutionPolicy Bypass -File instalar-tareas.ps1 -Desinstalar  # sacar
+```
+
+Como se sostiene el 24/7, que no es obvio: la tarea se reintenta arrancar **cada 2
+minutos para siempre**. Si el bot esta vivo no pasa nada; si esta muerto, lo
+levanta. Se probo primero el ajuste "reiniciar si la tarea falla", que parece el
+natural, y NO funciona: al morir el proceso Windows registra el fallo
+(`LastTaskResult` -1) pero nunca reinicia.
+
+Ese reintento cada 2 minutos obliga a lo otro: cada bot toma un **candado de
+instancia unica** al arrancar (`src/instancia_unica.py`) y se niega a correr si ya
+hay otro. El `MultipleInstances=IgnoreNew` de Windows no alcanza, porque solo
+conoce las instancias que arranco esa misma tarea, no las lanzadas a mano por los
+`.vbs`. Verificado en vivo: sin el candado quedaron dos `run_ofertas.py`
+corriendo, o sea cada oferta publicada dos veces.
+
+Como corren ocultos (`pythonw.exe`, sin consola), los logs van a archivo:
+`logs/ofertas.log` y `logs/generador.log`, con rotacion de 2 MB x 3.
+
+Para pararlos: `detener-bots-ocultos.vbs` (termina las tareas; matar el proceso a
+mano no alcanza, Windows lo revive al minuto).
+
+La PC ademas tiene que no suspenderse, si no los bots duermen con ella:
+`powercfg /change standby-timeout-ac 0`.
+
+Los lanzadores viejos (`iniciar-bot-ofertas-oculto.vbs`,
+`iniciar-todo-oculto.vbs`) siguen andando para arrancar a mano, pero ya no hacen
+falta.
 
 ## Antes de agregar un canal fuente
 
