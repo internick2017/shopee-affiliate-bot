@@ -170,7 +170,10 @@ Para borrarlas: `/olvidar_shopee`
 
 ## Si algo no funciona
 
-**El bot no responde.** Puede estar apagado. Avisale a Nick.
+**El bot no responde.** Desde el 29/08/2026 los bots arrancan solos con la
+computadora y se levantan solos si se caen, así que esto tendría que ser raro. Si
+igual no contesta, esperá 2 minutos: ese es el tiempo que tarda Windows en
+revivirlo. Si después de 2 minutos sigue mudo, avisale a Nick.
 
 **"Ese video pesa más de 20 MB."** Telegram no deja mandarle archivos más grandes
 al bot. Generá el video más corto o con menor calidad.

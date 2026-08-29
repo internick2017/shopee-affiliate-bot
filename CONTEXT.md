@@ -15,6 +15,20 @@ Lista de `user_id` de Telegram permitidos para usar el bot generador, en
 se le abre el bot (y si se cobra) quede en manos del operador más adelante, sin
 tener que rearquitecturar el control de acceso después.
 
+## Candado de instancia única
+
+Archivo bloqueado por el sistema operativo (`ofertas.lock`, `generador.lock`) que
+cada bot toma al arrancar; si ya lo tiene otro proceso, el bot no arranca
+(`src/instancia_unica.py`). Existe porque los bots los levanta una tarea programada
+que se reintenta **cada 2 minutos**, y el `MultipleInstances=IgnoreNew` de Windows
+solo conoce las instancias que arrancó esa misma tarea: no ve un bot lanzado a mano
+con los `.vbs`. Sin el candado se midieron dos `run_ofertas.py` corriendo a la vez,
+o sea cada oferta publicada dos veces en el canal.
+
+Es un bloqueo del SO y no un archivo con el PID adentro a propósito: si el bot
+crashea o se corta la luz, el bloqueo se libera solo y la tarea lo puede volver a
+levantar. Un archivo con el PID quedaría trabado para siempre.
+
 ## Modos de personas en el prompt de video
 
 Los tres valores que acepta `/video` para decidir quién puede aparecer:

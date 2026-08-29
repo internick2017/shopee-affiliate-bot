@@ -12,7 +12,6 @@ Uso:
 """
 
 import io
-import logging
 import tempfile
 from pathlib import Path
 
@@ -28,6 +27,8 @@ from src.bot_comandos import (
 )
 from src.bot_mensajes import texto_grabados, texto_idea, texto_tendencia, texto_ventas
 from src.config import load_config
+from src.instancia_unica import ya_hay_otra_instancia
+from src.logging_setup import configurar_logging
 from src.post_builder import HookBank
 from src.post_generator_bot import (
     CON_MANOS,
@@ -43,8 +44,9 @@ from src.trend_store import TrendStore
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("bot-generador")
+# A archivo ademas de pantalla: el bot corre oculto como tarea programada,
+# asi que sin esto un crash de madrugada no deja ningun rastro.
+logger = configurar_logging("bot-generador", "logs/generador.log")
 
 _MSG_SIN_ACCESO = "No tenés acceso a este bot. Hablá con el administrador."
 _MSG_VIDEO_PESADO = (
@@ -509,4 +511,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # La tarea programada reintenta arrancar el bot cada 2 minutos. Sin este
+    # candado, un bot ya vivo lanzado por otra via terminaria duplicado, y eso
+    # publica todo dos veces. Ver src/instancia_unica.py.
+    if ya_hay_otra_instancia("generador"):
+        logger.warning("Ya hay otra instancia corriendo. Este proceso no arranca.")
+        raise SystemExit(0)
+
     main()
