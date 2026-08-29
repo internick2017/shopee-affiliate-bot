@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,13 @@ _ALTO = 1920
 _DESENFOQUE = 70
 _SATURACION = 0.6
 _BRILLO = -0.18
+
+# Marca de agua (ver `scripts/build_watermark.py`): esquina inferior derecha, chica
+# y semi-transparente, para que no tape el producto ni la interfaz de Shopee Video.
+_WATERMARK = Path(__file__).resolve().parent.parent / "assets" / "watermark.png"
+_WATERMARK_ANCHO = 220
+_WATERMARK_OPACIDAD = 0.75
+_WATERMARK_MARGEN = 28
 
 
 def ffmpeg_exe() -> str:
@@ -51,19 +59,22 @@ MODO_MARCO = "marco"
 MODO_RECORTE = "recorte"
 
 
-def _filtro_recorte(ancho: int, alto: int) -> str:
+def _filtro_recorte(ancho: int, alto: int, *, con_watermark: bool) -> str:
     """Agranda hasta CUBRIR el lienzo vertical y recorta al centro. Sin franjas."""
-    return (
+    nucleo = (
         f"scale={ancho}:{alto}:force_original_aspect_ratio=increase,"
         f"crop={ancho}:{alto}"
     )
+    if not con_watermark:
+        return nucleo
+    return f"[0:v]{nucleo}[base];" + _filtro_watermark("base")
 
 
-def _filtro(ancho: int, alto: int) -> str:
+def _filtro(ancho: int, alto: int, *, con_watermark: bool) -> str:
     """Grafo de filtros: el video se duplica en fondo y frente. El fondo se agranda
     hasta cubrir el lienzo vertical, se recorta y se difumina; el frente se escala
     al ancho completo y se centra encima."""
-    return (
+    grafo = (
         f"[0:v]split=2[bg][fg];"
         f"[bg]scale={ancho}:{alto}:force_original_aspect_ratio=increase,"
         f"crop={ancho}:{alto},"
@@ -72,6 +83,20 @@ def _filtro(ancho: int, alto: int) -> str:
         # -2 = alto automático divisible por 2, requisito de los codecs h264.
         f"[fg]scale={ancho}:-2[frente];"
         f"[fondo][frente]overlay=(W-w)/2:(H-h)/2"
+    )
+    if not con_watermark:
+        return grafo
+    return f"{grafo}[base];" + _filtro_watermark("base")
+
+
+def _filtro_watermark(entrada_label: str) -> str:
+    """Escala el logo (segundo input, `-i assets/watermark.png`), le aplica la
+    opacidad, y lo pega en la esquina inferior derecha con margen."""
+    return (
+        f"[1:v]scale={_WATERMARK_ANCHO}:-1,format=rgba,"
+        f"colorchannelmixer=aa={_WATERMARK_OPACIDAD}[wm];"
+        f"[{entrada_label}][wm]overlay="
+        f"W-w-{_WATERMARK_MARGEN}:H-h-{_WATERMARK_MARGEN}"
     )
 
 
@@ -90,15 +115,24 @@ def to_vertical(
     completa, corta los costados). Ver el docstring del modulo por el compromiso.
 
     Devuelve True si ffmpeg terminó bien. No lanza: ante fallo loguea y devuelve
-    False, para que el llamador pueda degradar a entregar el video original."""
+    False, para que el llamador pueda degradar a entregar el video original.
+
+    Si existe `assets/watermark.png` (ver `scripts/build_watermark.py`) se pega
+    como marca de agua en la esquina inferior derecha; si no existe, se reencuadra
+    igual mas sin marca, para no romper el flujo por un asset faltante."""
+    con_watermark = _WATERMARK.is_file()
     if modo == MODO_RECORTE:
-        filtro = ["-vf", _filtro_recorte(ancho, alto)]
+        filtro_str = _filtro_recorte(ancho, alto, con_watermark=con_watermark)
+        usa_filter_complex = con_watermark
     else:
-        filtro = ["-filter_complex", _filtro(ancho, alto)]
+        filtro_str = _filtro(ancho, alto, con_watermark=con_watermark)
+        usa_filter_complex = True
+    filtro = ["-filter_complex", filtro_str] if usa_filter_complex else ["-vf", filtro_str]
+    entradas = ["-i", entrada, "-i", str(_WATERMARK)] if con_watermark else ["-i", entrada]
     cmd = [
         ffmpeg_exe(),
         "-y",
-        "-i", entrada,
+        *entradas,
         *filtro,
         "-c:v", "libx264",
         "-preset", "veryfast",
