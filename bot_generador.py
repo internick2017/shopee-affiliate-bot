@@ -29,7 +29,13 @@ from src.bot_comandos import (
 from src.bot_mensajes import texto_grabados, texto_idea, texto_tendencia, texto_ventas
 from src.config import load_config
 from src.post_builder import HookBank
-from src.post_generator_bot import generate_post_reply, generate_video_reference
+from src.post_generator_bot import (
+    CON_MANOS,
+    CON_PERSONAS,
+    generate_post_reply,
+    generate_video_reference,
+    leer_modificadores,
+)
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.sales_report import resumen_ventas
 from src.grabados_store import GrabadosStore
@@ -115,9 +121,10 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text("Armando la referencia vertical, dame unos segundos...")
 
     texto = update.message.text or ""
-    # "nativo" al final = el generador ya produce 9:16 (Google Flow), no hace falta
-    # componer para un recorte posterior.
-    nativo = texto.strip().lower().endswith("nativo")
+    # Modificadores opcionales: "nativo" (el generador ya da 9:16, no hace falta
+    # componer para el recorte posterior) y "manos"/"personas" (quien puede
+    # aparecer en el video). Sin nada, el default es sin personas.
+    nativo, personas = leer_modificadores(texto)
 
     ref = generate_video_reference(
         texto,
@@ -125,6 +132,7 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cfg["shopee_secret"],
         user_credentials=context.bot_data["credentials_store"].get(user.id),
         nativo=nativo,
+        personas=personas,
     )
 
     if ref.error:
@@ -157,8 +165,11 @@ async def _handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if ref.link:
         context.bot_data.setdefault("ultimo_link", {})[user.id] = ref.link
         modo = "vertical nativo (Flow)" if nativo else "para reencuadrar despues"
+        quien = {CON_MANOS: "con manos", CON_PERSONAS: "con una persona"}.get(
+            personas, "sin personas"
+        )
         await update.message.reply_text(
-            f"Prompt {modo}.\n\nLink del producto:\n{ref.link}",
+            f"Prompt {modo}, {quien}.\n\nLink del producto:\n{ref.link}",
             disable_web_page_preview=True,
         )
 

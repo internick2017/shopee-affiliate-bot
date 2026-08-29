@@ -14,3 +14,12 @@ Lista de `user_id` de Telegram permitidos para usar el bot generador, en
 `BOT_ALLOWED_USERS` (`.env`). Existe desde el MVP para que la decisión de a quién
 se le abre el bot (y si se cobra) quede en manos del operador más adelante, sin
 tener que rearquitecturar el control de acceso después.
+
+## Modos de personas en el prompt de video
+
+Los tres valores que acepta `/video` para decidir quién puede aparecer:
+`sin` (default, solo el producto), `manos` (manos sin caras) y `personas` (una
+persona adulta). El default es `sin` porque las manos son lo que peor generan los
+modelos de video. Es independiente del eje `nativo`, que decide el formato de
+salida. La prohibición de niños y bebés no es un modo: va en las tres variantes y
+ningún modificador la levanta.
