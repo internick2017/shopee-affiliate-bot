@@ -82,6 +82,7 @@ _MSG_BORRADO_OK = "Listo, borré tus credenciales. De ahora en más el link va a
 # El link NO va en el callback_data (tope de 64 bytes y ya nos quedariamos sin
 # margen con un shortlink largo): se guarda aparte, en memoria, por usuario.
 _CB_PUBLICAR_IGUAL = "publicar_igual"
+_MSG_ARMANDO_POST = "Armando el post, dame unos segundos..."
 _MSG_SIN_PENDIENTE = (
     "Ya no tengo guardado ese producto (se me reinicio el bot). Mandame el link de nuevo."
 )
@@ -479,6 +480,19 @@ async def _handle_publicar_igual(update: Update, context: ContextTypes.DEFAULT_T
     if not texto:
         await query.message.reply_text(_MSG_SIN_PENDIENTE)
         return
+
+    # Se saca el boton del mensaje viejo: ya se uso, y el link pendiente ya se
+    # consumio arriba — un segundo toque solo conseguiria el "ya no lo tengo".
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception as exc:  # noqa: BLE001 - cosmetico, no vale abortar el post
+        logger.info("No se pudo sacar el boton de publicar igual: %s", exc)
+
+    # Rearmar el post vuelve a pegarle a Shopee (redirect + API) y eso tarda unos
+    # segundos, con el bot bloqueado y sin ninguna señal en pantalla: sin este
+    # aviso parece que el boton no hizo nada. Va ANTES de la llamada lenta a
+    # proposito, que es lo unico que lo hace visible a tiempo.
+    await query.message.reply_text(_MSG_ARMANDO_POST)
 
     reply = generate_post_reply(
         texto,
