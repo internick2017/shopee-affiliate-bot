@@ -61,7 +61,12 @@ def shopee_dedup_key(text: str | None) -> str | None:
 
 def _build_post_propio(offer: ShopeeOffer, extra_link: str | None, hook: str) -> str:
     """El post con el template de Lanny y los datos que Shopee informa AHORA."""
-    extras: list[str] = [f"🏷️ {offer.descuento_pct}% OFF"]
+    # Sin descuento no se escribe la línea: "0% OFF" anuncia una oferta que no
+    # existe. Solo llega acá cuando el usuario pidió publicarlo igual desde el bot
+    # generador; el pipeline automático sigue exigiendo descuento antes de llamar.
+    extras: list[str] = []
+    if offer.descuento_pct > 0:
+        extras.append(f"🏷️ {offer.descuento_pct}% OFF")
     if extra_link:
         extras.append(f"🎟️ Ative o cupom aqui: {extra_link}")
 

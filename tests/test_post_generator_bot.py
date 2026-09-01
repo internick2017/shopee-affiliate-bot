@@ -390,3 +390,77 @@ def test_una_palabra_cualquiera_no_activa_nada():
     from src.post_generator_bot import SIN_PERSONAS, leer_modificadores
 
     assert leer_modificadores(f"/video {_LINK} porfa") == (False, SIN_PERSONAS)
+
+
+_PRODUCT_OFFER_SIN_DESCUENTO = {
+    "data": {
+        "productOfferV2": {
+            "nodes": [
+                {
+                    "productName": "Jogo Americano Tapete Mesa",
+                    "price": "26.99",
+                    "priceDiscountRate": 0,
+                    "commissionRate": "0.17",
+                    "offerLink": "https://s.shopee.com.br/propio",
+                    "imageUrl": "https://cf.shopee.com.br/file/abc",
+                }
+            ]
+        }
+    }
+}
+
+
+def test_producto_sin_descuento_avisa_el_motivo_real():
+    """Antes este caso caía en el mismo error que un link ilegible, y el mensaje
+    mentía: el producto SE lee, lo único que le falta es el descuento."""
+    hooks = HookBank(["Hook único de teste"])
+
+    reply = generate_post_reply(
+        "https://s.shopee.com.br/XXXX",
+        "app_id",
+        "secret",
+        hooks,
+        http_get=_fake_get("https://shopee.com.br/vendedor/1315742307/23294338184"),
+        http_post=_fake_post(_PRODUCT_OFFER_SIN_DESCUENTO),
+    )
+
+    assert reply.caption is None
+    assert reply.sin_descuento is True
+    assert "descuento" in reply.error.lower()
+    assert "vencido" not in reply.error.lower()
+
+
+def test_producto_ilegible_no_ofrece_publicar_igual():
+    hooks = HookBank(["Hook único de teste"])
+
+    reply = generate_post_reply(
+        "https://s.shopee.com.br/XXXX",
+        "app_id",
+        "secret",
+        hooks,
+        http_get=_fake_get("https://shopee.com.br/m/cupom-de-desconto"),
+        http_post=_fake_post({"data": {}}),
+    )
+
+    assert reply.error is not None
+    assert reply.sin_descuento is False
+
+
+def test_publicar_igual_arma_el_post_sin_la_linea_de_descuento():
+    hooks = HookBank(["Hook único de teste"])
+
+    reply = generate_post_reply(
+        "https://s.shopee.com.br/XXXX",
+        "app_id",
+        "secret",
+        hooks,
+        permitir_sin_descuento=True,
+        http_get=_fake_get("https://shopee.com.br/vendedor/1315742307/23294338184"),
+        http_post=_fake_post(_PRODUCT_OFFER_SIN_DESCUENTO),
+    )
+
+    assert reply.error is None
+    assert "Jogo Americano Tapete Mesa" in reply.caption
+    # "0% OFF" seria una oferta inventada.
+    assert "0%" not in reply.caption
+    assert "OFF" not in reply.caption

@@ -18,6 +18,15 @@ _ERROR_NO_RESUELVE = (
     "No pude leer ese producto en Shopee. Puede ser un link vencido, de cupón/campaña "
     "en vez de producto, o Shopee no lo tiene en su catálogo de afiliados ahora mismo."
 )
+# Caso DISTINTO al de arriba, y por eso mensaje distinto: el producto se lee
+# perfecto, lo único que le falta es el descuento para armar el "De X por Y".
+# Cuando los dos casos compartían mensaje, un producto sano con 0% de descuento
+# parecía un link roto y se descartaba sin motivo (visto en vivo, 2026-09-01).
+_ERROR_SIN_DESCUENTO = (
+    "Ese producto lo leí bien, pero Shopee no le marca descuento ahora mismo, así que "
+    "no puedo armar el post de oferta (el \"De R$ X por R$ Y\"). Si querés lo publico "
+    "igual, con el precio a secas."
+)
 
 
 @dataclass
@@ -32,6 +41,10 @@ class BotReply:
     aviso: str | None = None
     photo_url: str | None = None
     error: str | None = None
+    # True solo cuando el error es "no tiene descuento": le dice al bot que puede
+    # ofrecer publicarlo igual. Un link ilegible NO lo activa — ahí no hay nada
+    # que publicar.
+    sin_descuento: bool = False
 
 
 def generate_post_reply(
@@ -41,6 +54,7 @@ def generate_post_reply(
     hooks: HookBank,
     *,
     user_credentials: tuple[str, str] | None = None,
+    permitir_sin_descuento: bool = False,
     http_get: Callable[..., object] | None = None,
     http_post: Callable[..., object] | None = None,
 ) -> BotReply:
@@ -55,6 +69,10 @@ def generate_post_reply(
     registrar, `app_id`/`secret` (la cuenta por defecto) solo se usan para leer los
     datos del producto — el post lleva el link tal cual lo mandó el usuario, no el
     de la cuenta por defecto (retaguearlo sería monetizar para la cuenta equivocada).
+
+    `permitir_sin_descuento`: por defecto un producto sin descuento se rechaza (el
+    canal es de ofertas). Con esto en True se arma igual, sin la línea de "% OFF" —
+    es lo que pide el usuario cuando contesta "Publicar igual".
     """
     links = extract_shopee_shortlinks(text)
     if not links:
@@ -69,8 +87,10 @@ def generate_post_reply(
 
     resolve_app_id, resolve_secret = user_credentials or (app_id, secret)
     offer = resolve_shopee_offer(link_original, resolve_app_id, resolve_secret, **resolve_kwargs)
-    if offer is None or not offer.tiene_descuento:
+    if offer is None:
         return BotReply(error=_ERROR_NO_RESUELVE)
+    if not offer.tiene_descuento and not permitir_sin_descuento:
+        return BotReply(error=_ERROR_SIN_DESCUENTO, sin_descuento=True)
 
     if user_credentials is None:
         offer = replace(offer, link_propio=link_original)

@@ -15,9 +15,16 @@ import io
 import tempfile
 from pathlib import Path
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from src.bot_comandos import (
     comandos_para_telegram,
@@ -71,6 +78,13 @@ _MSG_REGISTRO_USO = (
     "te arma el post igual, pero con el link que vos mandaste tal cual (no lo re-taguea)."
 )
 _MSG_BORRADO_OK = "Listo, borré tus credenciales. De ahora en más el link va a ser tal cual lo mandes."
+# Boton que aparece cuando el producto se leyo bien pero no tiene descuento.
+# El link NO va en el callback_data (tope de 64 bytes y ya nos quedariamos sin
+# margen con un shortlink largo): se guarda aparte, en memoria, por usuario.
+_CB_PUBLICAR_IGUAL = "publicar_igual"
+_MSG_SIN_PENDIENTE = (
+    "Ya no tengo guardado ese producto (se me reinicio el bot). Mandame el link de nuevo."
+)
 
 
 def _check_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -414,22 +428,71 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
     if reply.error:
+        # Sin descuento no es un error del link: el producto se leyo bien. Se avisa
+        # el motivo real y se ofrece publicarlo igual, en vez de perderlo.
+        if reply.sin_descuento:
+            context.bot_data.setdefault("pendiente_sin_descuento", {})[user.id] = text
+            await update.message.reply_text(
+                reply.error,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Publicar igual", callback_data=_CB_PUBLICAR_IGUAL)]]
+                ),
+            )
+            return
         await update.message.reply_text(reply.error)
         return
 
+    await _enviar_post(update.message, reply)
+
+
+async def _enviar_post(mensaje, reply) -> None:
+    """Manda el post armado. Vive aparte porque lo usan dos caminos: el link normal
+    y el boton "Publicar igual"."""
     if reply.photo_url:
-        await update.message.reply_photo(photo=reply.photo_url, caption=reply.caption)
+        await mensaje.reply_photo(photo=reply.photo_url, caption=reply.caption)
     else:
         # Shopee no siempre trae imageUrl; degradar a solo texto en vez de fallar.
         # SIN parse_mode: el post de Lanny es texto plano con emojis, no tiene una
         # sola etiqueta HTML. Pedirle a Telegram que lo parsee como HTML no aportaba
         # nada y hacia que un titulo con "&" tumbara el mensaje entero. La rama de
         # la foto, dos lineas arriba, siempre lo mando asi.
-        await update.message.reply_text(reply.caption)
+        await mensaje.reply_text(reply.caption)
 
     # Aparte y al final: el post de arriba se copia tal cual, este aviso no.
     if reply.aviso:
-        await update.message.reply_text(reply.aviso, parse_mode=ParseMode.HTML)
+        await mensaje.reply_text(reply.aviso, parse_mode=ParseMode.HTML)
+
+
+async def _handle_publicar_igual(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Boton "Publicar igual": rearma el post del ultimo producto sin descuento."""
+    query = update.callback_query
+    # Telegram deja el boton "cargando" hasta que se contesta el callback.
+    await query.answer()
+
+    cfg = context.bot_data["cfg"]
+    user = query.from_user
+    if user.id not in cfg["bot_allowed_users"]:
+        await query.message.reply_text(_MSG_SIN_ACCESO)
+        return
+
+    texto = context.bot_data.get("pendiente_sin_descuento", {}).pop(user.id, None)
+    if not texto:
+        await query.message.reply_text(_MSG_SIN_PENDIENTE)
+        return
+
+    reply = generate_post_reply(
+        texto,
+        cfg["shopee_app_id"],
+        cfg["shopee_secret"],
+        context.bot_data["hooks"],
+        user_credentials=context.bot_data["credentials_store"].get(user.id),
+        permitir_sin_descuento=True,
+    )
+    if reply.error:
+        await query.message.reply_text(reply.error)
+        return
+
+    await _enviar_post(query.message, reply)
 
 
 async def _handle_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -494,6 +557,9 @@ def main() -> None:
     application.add_handler(CommandHandler("tendencia", _handle_tendencia))
     application.add_handler(CommandHandler("grabados", _handle_grabados))
     application.add_handler(CommandHandler("olvidar_video", _handle_olvidar_video))
+    application.add_handler(
+        CallbackQueryHandler(_handle_publicar_igual, pattern=f"^{_CB_PUBLICAR_IGUAL}$")
+    )
     application.add_handler(
         MessageHandler(
             (filters.VIDEO | filters.Document.VIDEO) & filters.ChatType.PRIVATE,
