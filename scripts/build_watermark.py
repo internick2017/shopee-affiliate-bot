@@ -1,18 +1,27 @@
-"""Genera `assets/watermark.png`: ícono de bolsa + rayo y el usuario de Shopee de
-Lanny (@lannyherrera), en un PNG con fondo transparente, para pegarlo como marca
-de agua sobre los videos verticales (ver `src/video_vertical.py`).
+"""Genera un PNG de marca de agua: ícono de bolsa + rayo y un usuario de Shopee,
+con fondo transparente, para pegarlo sobre los videos verticales (ver
+`src/video_vertical.py`).
 
-Se corre a mano cuando hay que regenerar el watermark (cambio de texto, tamaño,
-etc.) — no en cada build. `python scripts/build_watermark.py`.
+Sin argumentos genera el de siempre, `assets/watermark.png` con @lannyherrera, que
+es el que usa el bot al publicar para Lanny. Con `--usuario` y `--salida` genera
+cualquier otro: Nick publica también en un canal propio y necesita el suyo.
+
+Se corre a mano cuando hay que regenerar un watermark, no en cada build:
+
+    python scripts/build_watermark.py
+    python scripts/build_watermark.py --usuario @nickgranados --salida assets/watermark-nick.png
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-_SALIDA = Path(__file__).resolve().parent.parent / "assets" / "watermark.png"
+_RAIZ = Path(__file__).resolve().parent.parent
+_SALIDA = _RAIZ / "assets" / "watermark.png"
+_USUARIO = "@lannyherrera"
 _ALTO = 60
 _PAD = 10
 _RADIO_ICONO = 8
@@ -31,8 +40,18 @@ def _fuente(tam: int) -> ImageFont.FreeTypeFont:
 
 
 def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--usuario", default=_USUARIO, help="usuario de Shopee, con arroba")
+    p.add_argument("--salida", type=Path, default=_SALIDA)
+    args = p.parse_args()
+
     fuente = _fuente(22)
-    texto = "@lannyherrera"
+    texto = args.usuario
+    # La letra del ícono sale del propio usuario, así no hay que tocar el código
+    # para cada marca nueva. Con @lannyherrera da "L", igual que la versión fija
+    # que había antes.
+    inicial = texto.lstrip("@")[:1].upper() or "?"
+    salida = args.salida if args.salida.is_absolute() else _RAIZ / args.salida
 
     tmp = Image.new("RGBA", (1, 1))
     medidas = ImageDraw.Draw(tmp).textbbox((0, 0), texto, font=fuente)
@@ -51,7 +70,7 @@ def main() -> None:
     fuente_icono = _fuente(round(icono_lado * 0.65))
     draw.text(
         (_PAD + icono_lado / 2, _PAD + icono_lado / 2),
-        "L",
+        inicial,
         font=fuente_icono,
         fill=_COLOR_ICONO_TEXTO,
         anchor="mm",
@@ -65,9 +84,9 @@ def main() -> None:
         anchor="lm",
     )
 
-    _SALIDA.parent.mkdir(parents=True, exist_ok=True)
-    lienzo.save(_SALIDA)
-    print(f"Guardado {_SALIDA} ({lienzo.width}x{lienzo.height})")
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    lienzo.save(salida)
+    print(f"Guardado {salida} ({lienzo.width}x{lienzo.height})")
 
 
 if __name__ == "__main__":
