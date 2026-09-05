@@ -4,13 +4,11 @@ Los canales fuente postean `meli.la/XXXX`, que redirige a
 `mercadolivre.com.br/social/<afiliado>?ref=<blob cifrado>`. El `ref` no se puede
 reescribir (está firmado a la cuenta que lo generó), pero la página resuelta trae
 embebido un JSON interno de tracking (`melidataSocial`) con el item_id real del
-producto compartido — validado contra 43 links reales, 91% de éxito (ver
-docs/superpowers/specs/2026-07-14-mercadolivre-auto-retag-design.md).
+producto compartido — validado contra 43 links reales, 91% de éxito.
 
 El item_id NO siempre es un ID de catálogo compatible con `/p/{item_id}`: a veces es
 el ID crudo de un anuncio individual sin ficha de catálogo compartida, y en ese caso
-`/p/` da 404 (bug encontrado en producción el 2026-07-17, ~58% de los posts afectados
-— ver docs/superpowers/specs/2026-07-17-mercadolivre-canonical-url-fix-design.md). La
+`/p/` da 404 (bug encontrado en producción el 2026-07-17, ~58% de los posts afectados). La
 solución: el mismo JSON trae, en el bloque `metadata` cuyo "id" coincide con el
 item_id, un campo "url" con la ruta REAL del producto (`/up/{user_product_id}`,
 `produto.mercadolivre.com.br/MLB-{id}-slug`, o un deep-link `ddnf.adj.st` que hay que

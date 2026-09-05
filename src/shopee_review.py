@@ -3,8 +3,7 @@ producto con descuento comprobable, arma el post con datos reales y el link prop
 (automático). Si no, reenvía la oferta al canal para armar el link a mano.
 
 Ver `shopee_resolver.py` para el porqué de "un producto por post" y de la
-clasificación de links extra (cupón/campaña vs. ruido a ignorar) — decisiones
-tomadas en docs/superpowers/specs/2026-07-18-shopee-post-propio-design.md.
+clasificación de links extra (cupón/campaña vs. ruido a ignorar).
 """
 
 import asyncio
