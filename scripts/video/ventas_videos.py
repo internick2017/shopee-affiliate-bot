@@ -124,18 +124,28 @@ def main() -> int:
     con_venta = 0
     for v in videos:
         f = datetime.datetime.fromtimestamp(v.ts).strftime("%d/%m")
+        # Sin este dato un "no vendio" es ambiguo: puede ser un video que no
+        # funciona, o uno que nunca llego a publicarse.
+        if not v.publicado:
+            pub = "SIN PUBLICAR"
+        else:
+            dias = v.dias_publicado or 0
+            pub = f"{dias:.0f}d al aire" if dias >= 1 else "publicado hoy"
         e = ventas.get(v.item_id)
         if e and e["unidades"]:
             con_venta += 1
             org = ",".join(sorted(e["origenes"]))
             print(f"  VENDIO   {f} {v.canal:6} {v.titulo[:34]:34} "
-                  f"{e['unidades']}u  R${e['comision']:6.2f}  ({org})")
+                  f"{e['unidades']}u  R${e['comision']:6.2f}  ({org})  [{pub}]")
         elif e:
-            print(f"  cancel.  {f} {v.canal:6} {v.titulo[:34]:34} {e['estados']}")
+            print(f"  cancel.  {f} {v.canal:6} {v.titulo[:34]:34} "
+                  f"{e['estados']}  [{pub}]")
         else:
-            print(f"    -      {f} {v.canal:6} {v.titulo[:34]}")
+            print(f"    -      {f} {v.canal:6} {v.titulo[:34]:34}  [{pub}]")
 
-    print(f"\ncon venta: {con_venta} de {len(videos)} videos")
+    publicados = [v for v in videos if v.publicado]
+    print(f"\ncon venta: {con_venta} de {len(videos)} videos "
+          f"({len(publicados)} publicados, {len(videos) - len(publicados)} sin publicar)")
 
     org = collections.defaultdict(lambda: [0, 0.0])
     for e in ventas.values():

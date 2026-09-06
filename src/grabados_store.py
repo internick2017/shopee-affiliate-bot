@@ -116,6 +116,19 @@ class VideoProducido:
     marca: str
     archivo: str
     ts: float
+    publicado_ts: float | None = None
+
+    @property
+    def publicado(self) -> bool:
+        return self.publicado_ts is not None
+
+    @property
+    def dias_publicado(self) -> float | None:
+        """Cuanto lleva expuesto. Un "no vendio" a las horas de publicar no dice
+        lo mismo que uno despues de dos semanas."""
+        if self.publicado_ts is None:
+            return None
+        return (time.time() - self.publicado_ts) / 86400
 
     @property
     def comision_reais(self) -> float | None:
@@ -153,9 +166,17 @@ class VideosStore:
             "CREATE TABLE IF NOT EXISTS videos_producidos ("
             "item_id INTEGER NOT NULL, canal TEXT NOT NULL, ts REAL NOT NULL, "
             "titulo TEXT, link TEXT, precio REAL, comision_pct REAL, "
-            "herramienta TEXT, marca TEXT, archivo TEXT, "
+            "herramienta TEXT, marca TEXT, archivo TEXT, publicado_ts REAL, "
             "PRIMARY KEY (item_id, canal))"
         )
+        # Migracion para las bases creadas antes de que existiera la columna: sin
+        # esto, una base ya poblada seguiria sin `publicado_ts` y todo lo que la
+        # lea fallaria.
+        columnas = {f[1] for f in self._conn.execute(
+            "PRAGMA table_info(videos_producidos)")}
+        if "publicado_ts" not in columnas:
+            self._conn.execute(
+                "ALTER TABLE videos_producidos ADD COLUMN publicado_ts REAL")
         self._conn.commit()
 
     def registrar(
@@ -182,11 +203,32 @@ class VideosStore:
             "ON CONFLICT(item_id, canal) DO UPDATE SET "
             "ts=excluded.ts, titulo=excluded.titulo, link=excluded.link, "
             "precio=excluded.precio, comision_pct=excluded.comision_pct, "
+            # `publicado_ts` queda afuera a proposito: regenerar un link o
+            # rehacer el video no cambia cuando se publico.
             "herramienta=excluded.herramienta, marca=excluded.marca, archivo=excluded.archivo",
             (int(item_id), canal, now, titulo, link, precio, comision_pct,
              herramienta, marca, archivo),
         )
         self._conn.commit()
+
+    def marcar_publicado(
+        self, item_id: int, canal: str, *, cuando: float | None = None
+    ) -> bool:
+        """Registra que el video salio al aire. Se marca aparte de `registrar`
+        porque publicar lo hace Nick a mano en Shopee Video, despues y por fuera de
+        la produccion del video. False si ese (item_id, canal) no existe."""
+        cur = self._conn.execute(
+            "UPDATE videos_producidos SET publicado_ts = ? "
+            "WHERE item_id = ? AND canal = ?",
+            (time.time() if cuando is None else cuando, int(item_id), canal),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def sin_publicar(self, canal: str | None = None) -> list[VideoProducido]:
+        """Videos producidos que todavia no salieron. Son plata parada: el costo
+        ya se pago."""
+        return [v for v in self.listar(canal=canal, cuantos=500) if not v.publicado]
 
     def ya_tiene_video(self, item_id: int, canal: str) -> bool:
         fila = self._conn.execute(
@@ -207,7 +249,7 @@ class VideosStore:
     def listar(self, canal: str | None = None, cuantos: int = 50) -> list[VideoProducido]:
         sql = (
             "SELECT item_id, canal, titulo, link, precio, comision_pct, herramienta, "
-            "marca, archivo, ts FROM videos_producidos"
+            "marca, archivo, ts, publicado_ts FROM videos_producidos"
         )
         args: list = []
         if canal:
@@ -219,7 +261,7 @@ class VideosStore:
             VideoProducido(
                 item_id=f[0], canal=f[1], titulo=f[2] or "", link=f[3] or "",
                 precio=f[4], comision_pct=f[5], herramienta=f[6] or "",
-                marca=f[7] or "", archivo=f[8] or "", ts=f[9],
+                marca=f[7] or "", archivo=f[8] or "", ts=f[9], publicado_ts=f[10],
             )
             for f in self._conn.execute(sql, args).fetchall()
         ]

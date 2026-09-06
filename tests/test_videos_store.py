@@ -94,3 +94,74 @@ def test_convive_con_grabados_en_la_misma_base(tmp_path):
     grabados.marcar(2, titulo="De Lanny")
     assert grabados.grabados_todos() == {2}
     assert videos.total() == 1
+
+
+def test_arranca_sin_publicar(store):
+    store.registrar(1, canal="nick")
+    v = store.listar()[0]
+    assert v.publicado is False
+    assert v.publicado_ts is None
+    assert v.dias_publicado is None
+
+
+def test_marcar_publicado(store):
+    store.registrar(1, canal="nick")
+    assert store.marcar_publicado(1, "nick", cuando=_HOY) is True
+    v = store.listar()[0]
+    assert v.publicado is True
+    assert v.publicado_ts == _HOY
+
+
+def test_marcar_publicado_de_un_video_inexistente(store):
+    assert store.marcar_publicado(999, "nick") is False
+
+
+def test_publicar_es_por_canal(store):
+    store.registrar(1, canal="nick")
+    store.registrar(1, canal="lanny")
+    store.marcar_publicado(1, "nick", cuando=_HOY)
+    porcanal = {v.canal: v.publicado for v in store.listar()}
+    assert porcanal == {"nick": True, "lanny": False}
+
+
+def test_regenerar_el_link_no_borra_la_fecha_de_publicacion(store):
+    """Re-taguear un link o rehacer el video no cambia cuando salio al aire."""
+    store.registrar(1, canal="nick", link="viejo")
+    store.marcar_publicado(1, "nick", cuando=_HOY)
+    store.registrar(1, canal="nick", link="nuevo")
+    v = store.listar()[0]
+    assert v.link == "nuevo"
+    assert v.publicado_ts == _HOY
+
+
+def test_sin_publicar(store):
+    store.registrar(1, canal="nick")
+    store.registrar(2, canal="nick")
+    store.marcar_publicado(1, "nick")
+    assert [v.item_id for v in store.sin_publicar()] == [2]
+
+
+def test_migracion_de_una_base_sin_la_columna(tmp_path):
+    """Una base creada antes de que existiera `publicado_ts` tiene que seguir
+    abriendo, con los datos intactos."""
+    import sqlite3
+    db = tmp_path / "vieja.db"
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE videos_producidos ("
+        "item_id INTEGER NOT NULL, canal TEXT NOT NULL, ts REAL NOT NULL, "
+        "titulo TEXT, link TEXT, precio REAL, comision_pct REAL, "
+        "herramienta TEXT, marca TEXT, archivo TEXT, PRIMARY KEY (item_id, canal))"
+    )
+    con.execute(
+        "INSERT INTO videos_producidos (item_id, canal, ts, titulo) VALUES (7,'nick',1.0,'Viejo')"
+    )
+    con.commit()
+    con.close()
+
+    from src.grabados_store import VideosStore as VS
+    store = VS(db)
+    v = store.listar()[0]
+    assert v.titulo == "Viejo"
+    assert v.publicado is False
+    assert store.marcar_publicado(7, "nick") is True
