@@ -15,7 +15,8 @@ Uso:
     python run_ofertas.py --observe  # modo diagnóstico: loguea cada mensaje y su chat_id
 
 Requiere AMAZON_TAG en el .env porque el handler de Amazon es el que monetiza; sin
-eso no arranca.
+eso no arranca. Con AMAZON_ENABLED=false el handler de Amazon se apaga (las ofertas de
+Amazon se ignoran) y el tag deja de ser obligatorio.
 """
 
 import asyncio
@@ -105,7 +106,11 @@ async def main() -> None:
     observe = "--observe" in sys.argv
     cfg = load_config()
 
-    if not cfg["amazon_tag"]:
+    if not cfg["amazon_enabled"]:
+        logger.warning(
+            "AMAZON_ENABLED=false: el handler de Amazon está apagado y sus ofertas se ignoran."
+        )
+    elif not cfg["amazon_tag"]:
         logger.error(
             "Falta AMAZON_TAG en el .env: el handler de Amazon necesita tu tag de afiliado, así que el bot no arranca."
         )
@@ -178,7 +183,6 @@ async def main() -> None:
     expired = dedup.purge()
     if expired:
         logging.info("Dedup: %d claves vencidas purgadas", expired)
-    amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
     shopee_review = ShopeeReviewPipeline(
         shopee_poster,
         dedup=dedup,
@@ -194,13 +198,20 @@ async def main() -> None:
         matt_tool=cfg["ml_matt_tool"],
         hooks=hookbank,
     )
-    # Amazon primero: es el único que monetiza solo. Se rinde ante un mensaje con
-    # links de Mercado Livre, así que esas ofertas caen al handler de ML.
-    pipeline_holder["pipeline"] = OfferPipeline([amazon, shopee_review, ml_review])
+    handlers = [shopee_review, ml_review]
+    if cfg["amazon_enabled"]:
+        # Amazon primero: es el único que monetiza solo. Se rinde ante un mensaje con
+        # links de Mercado Livre, así que esas ofertas caen al handler de ML.
+        amazon = AmazonPipeline(cfg["amazon_tag"], amazon_poster, hookbank, dedup=dedup)
+        handlers.insert(0, amazon)
+    # Sin el handler de Amazon nadie reclama sus links: cada handler reclama solo
+    # su propio dominio, así que esas ofertas se descartan en vez de caer en otro.
+    pipeline_holder["pipeline"] = OfferPipeline(handlers)
 
     logger.info(
-        "Bot de ofertas listo. amazon_tag=%s source_chats=%s amazon_channel=%s "
+        "Bot de ofertas listo. amazon_enabled=%s amazon_tag=%s source_chats=%s amazon_channel=%s "
         "shopee_channel=%s ml_channel=%s dedup_db=%s (observe=%s)",
+        cfg["amazon_enabled"],
         cfg["amazon_tag"],
         cfg["source_chats"],
         amazon_target,

@@ -32,6 +32,12 @@ def _maybe_decimal(raw, default: str) -> Decimal:
     return Decimal(default)
 
 
+def _is_enabled(raw) -> bool:
+    """Interruptor on/off del .env. Ausente o vacío = prendido: apagar tiene que ser
+    una decisión explícita (false, 0, no, off), no un olvido."""
+    return (raw or "").strip().lower() not in ("false", "0", "no", "off")
+
+
 def load_config() -> dict:
     """Carga configuración desde .env (secretos) y variables con defaults."""
     load_dotenv()
@@ -60,6 +66,7 @@ def load_config() -> dict:
         "user_credentials_db": os.getenv("USER_CREDENTIALS_DB", "user_credentials.db"),
         "hooks_file": os.getenv("HOOKS_FILE", "hooks.txt"),
         "amazon_tag": os.getenv("AMAZON_TAG"),
+        "amazon_enabled": _is_enabled(os.getenv("AMAZON_ENABLED")),
         "ml_matt_word": os.getenv("ML_MATT_WORD"),
         "ml_matt_tool": os.getenv("ML_MATT_TOOL"),
         "shopee_min_commission_pct": _maybe_decimal(os.getenv("SHOPEE_MIN_COMMISSION_PCT"), "6"),

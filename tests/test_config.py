@@ -163,6 +163,38 @@ def test_bot_allowed_users_parsed_as_int_set(monkeypatch):
     assert cfg["bot_allowed_users"] == {111, 222}
 
 
+def test_amazon_enabled_by_default(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("AMAZON_ENABLED", raising=False)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["amazon_enabled"] is True
+
+
+def test_amazon_enabled_empty_is_true(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.setenv("AMAZON_ENABLED", "")
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    cfg = config.load_config()
+
+    assert cfg["amazon_enabled"] is True
+
+
+def test_amazon_disabled_values(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
+    monkeypatch.delenv("SOURCE_CHATS", raising=False)
+    monkeypatch.delenv("TARGET_CHANNEL_ID", raising=False)
+
+    for raw in ("false", "False", " 0 ", "no", "OFF"):
+        monkeypatch.setenv("AMAZON_ENABLED", raw)
+        assert config.load_config()["amazon_enabled"] is False, raw
+
+
 def test_bot_allowed_users_absent_is_empty_set(monkeypatch):
     monkeypatch.setattr(config, "load_dotenv", _no_op_load_dotenv)
     monkeypatch.delenv("BOT_ALLOWED_USERS", raising=False)

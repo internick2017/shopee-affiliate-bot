@@ -56,6 +56,8 @@ Detalles que no se ven en la tabla:
 2. Copiar `.env.example` a `.env` y completar:
    - `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`: gratis en https://my.telegram.org
    - `AMAZON_TAG`: tu tag de afiliado de Amazon (sin esto el bot no arranca)
+   - `AMAZON_ENABLED`: `false` apaga el handler de Amazon (sus ofertas se ignoran y el
+     tag deja de ser obligatorio). Vacío = prendido.
    - `TARGET_CHANNEL_ID`: canal de los posts de Amazon
    - `SHOPEE_CHANNEL_ID` / `ML_CHANNEL_ID`: canal de Shopee y de Mercado Livre (en ambos:
      post propio o reenvío manual, según si el link resuelve con descuento). Los canales
