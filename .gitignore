@@ -38,3 +38,6 @@ diagnostico_*.py
 fetch_fotos.py
 links_*.txt
 conteo_*.txt
+
+# Videos entregados (Shopee Video Flow) - pesados, no van al repo
+videos_entregados/
