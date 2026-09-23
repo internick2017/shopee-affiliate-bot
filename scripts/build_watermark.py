@@ -2,14 +2,22 @@
 con fondo transparente, para pegarlo sobre los videos verticales (ver
 `src/video_vertical.py`).
 
-Sin argumentos genera el de siempre, `assets/watermark.png` con @lannyherrera, que
+Sin argumentos genera el de siempre, `assets/watermark.png` con "lannyherrera", que
 es el que usa el bot al publicar para Lanny. Con `--usuario` y `--salida` genera
 cualquier otro: Nick publica también en un canal propio y necesita el suyo.
+
+IMPORTANTE (2026-09-08): el texto va SIN arroba. Shopee removió un video con
+"@lannyherrera" en la marca de agua y restringió la cuenta, citando su política contra
+"direcionar os usuários" hacia plataformas competidoras — el símbolo @ es la señal más
+obvia de que es un handle de otra red social. Sacarlo es una mitigación, no una
+solución confirmada (ver memoria global
+shopee-video-flow-video-removido-restriccion-cuenta.md). No volver a poner el @ sin
+haber confirmado antes que el problema no vuelve a aparecer.
 
 Se corre a mano cuando hay que regenerar un watermark, no en cada build:
 
     python scripts/build_watermark.py
-    python scripts/build_watermark.py --usuario @nickgranados --salida assets/watermark-nick.png
+    python scripts/build_watermark.py --usuario nickgranados --salida assets/watermark-nick.png
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 _RAIZ = Path(__file__).resolve().parent.parent
 _SALIDA = _RAIZ / "assets" / "watermark.png"
-_USUARIO = "@lannyherrera"
+_USUARIO = "lannyherrera"
 _ALTO = 60
 _PAD = 10
 _RADIO_ICONO = 8
@@ -41,7 +49,7 @@ def _fuente(tam: int) -> ImageFont.FreeTypeFont:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--usuario", default=_USUARIO, help="usuario de Shopee, con arroba")
+    p.add_argument("--usuario", default=_USUARIO, help="usuario de Shopee, SIN arroba")
     p.add_argument("--salida", type=Path, default=_SALIDA)
     args = p.parse_args()
 
