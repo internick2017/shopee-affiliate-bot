@@ -276,3 +276,31 @@ def test_ventana_de_90_dias():
     fin = int(_T.timestamp())
     assert f"purchaseTimeStart:{fin - 90 * 86400}" in consultas[0]
     assert f"purchaseTimeEnd:{fin}" in consultas[0]
+
+
+# --- Arreglos de la revision final ---
+
+
+def test_canal_desconocido_no_tumba_la_corrida_y_queda_registrado():
+    """Un canal nuevo en grabados.db (que no esta en CUENTA_DE_CANAL) no puede
+    frenar la copia de los demas videos ni perderse sin rastro."""
+    db = _FakeSupabase()
+    r = sincronizar({}, [_video(), _video(canal="tiktok", item_id=9)], db, ahora=_T, pausa=0)
+    tabla, filas, _ = db.upserts[0]
+    assert tabla == "video" and [f["canal"] for f in filas] == ["nick"]
+    # Los conocidos se copian igual, pero la corrida queda marcada para que se vea.
+    assert r["videos"] is False
+    assert db.registros[0]["ok"] is False and db.registros[0]["filas"] == 1
+    assert "tiktok" in (db.registros[0]["error"] or "")
+
+
+def test_filas_repetidas_en_la_misma_corrida_se_mandan_una_vez():
+    """Postgres rechaza un upsert con la misma clave dos veces en el mismo lote
+    ("cannot affect row a second time"); gana la ultima, que es la mas nueva."""
+    db = _FakeSupabase()
+    nodo = _nodo(itemTotalCommission="1")
+    nodo["orders"][0]["items"].append(dict(nodo["orders"][0]["items"][0], itemTotalCommission="2"))
+    sincronizar({"nick": ("a", "b")}, [], db, ahora=_T, http_post=_shopee([_pagina([nodo])]), pausa=0)
+    filas = db.upserts[0][1]
+    assert len(filas) == 1 and filas[0]["comision"] == 2.0
+    assert db.registros[0]["filas"] == 1

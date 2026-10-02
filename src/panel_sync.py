@@ -81,7 +81,8 @@ def filas_de_ventas(cuenta: str, nodos: list[dict], *, vista_en: datetime) -> li
 
 
 def filas_de_videos(videos: list[VideoProducido]) -> list[dict]:
-    """Una fila de `video` por cada (canal, producto) de `grabados.db`."""
+    """Una fila de `video` por cada (canal, producto) de `grabados.db`. Un canal que
+    no esta en CUENTA_DE_CANAL se saltea: `sincronizar` lo informa como error."""
     return [
         {
             "canal": v.canal,
@@ -97,7 +98,17 @@ def filas_de_videos(videos: list[VideoProducido]) -> list[dict]:
             "publicado_en": _iso(v.publicado_ts),
         }
         for v in videos
+        if v.canal in CUENTA_DE_CANAL
     ]
+
+
+def _sin_repetidas(filas: list[dict], clave: str) -> list[dict]:
+    """Postgres rechaza un upsert que toca la misma fila dos veces en un lote
+    ("ON CONFLICT DO UPDATE command cannot affect row a second time"). Gana la
+    ultima aparicion."""
+    columnas = clave.split(",")
+    unicas = {tuple(f[c] for c in columnas): f for f in filas}
+    return list(unicas.values())
 
 
 def leer_conversiones(
@@ -194,7 +205,7 @@ def sincronizar(
         empezo = datetime.now(UTC)
         nodos, error = leer_conversiones(app_id, secret, desde=fin - _DIAS * 86400,
                                          hasta=fin, http_post=http_post, pausa=pausa)
-        filas = filas_de_ventas(cuenta, nodos, vista_en=ahora)
+        filas = _sin_repetidas(filas_de_ventas(cuenta, nodos, vista_en=ahora), _CLAVE_VENTA)
         escritas = 0
         try:
             db.upsert("venta", filas, _CLAVE_VENTA)
@@ -205,12 +216,14 @@ def sincronizar(
         _registrar(db, cuenta, empezo, error is None, escritas, error)
 
     empezo = datetime.now(UTC)
-    filas_v = filas_de_videos(videos)
+    desconocidos = sorted({v.canal for v in videos if v.canal not in CUENTA_DE_CANAL})
+    aviso = f"Canales sin cuenta en el panel: {', '.join(desconocidos)}" if desconocidos else None
     try:
+        filas_v = _sin_repetidas(filas_de_videos(videos), _CLAVE_VIDEO)
         db.upsert("video", filas_v, _CLAVE_VIDEO)
-        resultado["videos"] = True
-        _registrar(db, None, empezo, True, len(filas_v), None)
+        resultado["videos"] = aviso is None
+        _registrar(db, None, empezo, aviso is None, len(filas_v), aviso)
     except Exception as exc:  # noqa: BLE001
         resultado["videos"] = False
-        _registrar(db, None, empezo, False, 0, str(exc))
+        _registrar(db, None, empezo, False, 0, f"{aviso}; {exc}" if aviso else str(exc))
     return resultado
