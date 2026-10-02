@@ -31,7 +31,10 @@ Uso:
 #>
 
 param(
-    [switch]$Desinstalar
+    [switch]$Desinstalar,
+    # Registra solo la sincronizacion del panel, sin tocar las tareas de los bots
+    # (re-registrarlas reinicia los bots que estan corriendo).
+    [switch]$SoloPanel
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,8 +45,12 @@ $tareas = @(
     @{ Nombre = "ShopeeBotGenerador"; Script = "bot_generador.py"; Que = "Bot generador de posts (Telegram privado)" }
 )
 
+# La sincronizacion del panel de reportes NO es un bot: corre, copia las ventas y
+# los videos a Supabase y termina. Por eso va aparte, con otro disparador.
+$panel = @{ Nombre = "ShopeePanelSync"; Script = "sync_panel.py"; Que = "Copia ventas y videos al panel de reportes (cada 4 h)" }
+
 if ($Desinstalar) {
-    foreach ($t in $tareas) {
+    foreach ($t in $tareas + @($panel)) {
         if (Get-ScheduledTask -TaskName $t.Nombre -ErrorAction SilentlyContinue) {
             Stop-ScheduledTask -TaskName $t.Nombre -ErrorAction SilentlyContinue
             Unregister-ScheduledTask -TaskName $t.Nombre -Confirm:$false
@@ -69,7 +76,7 @@ Write-Host "Proyecto: $proyecto"
 Write-Host "Python:   $pythonw"
 Write-Host ""
 
-foreach ($t in $tareas) {
+foreach ($t in $(if ($SoloPanel) { @() } else { $tareas })) {
     $accion = New-ScheduledTaskAction -Execute $pythonw -Argument $t.Script -WorkingDirectory $proyecto
     # DOS disparadores, y hacen falta los dos:
     #
@@ -114,6 +121,40 @@ foreach ($t in $tareas) {
     Register-ScheduledTask -TaskName $t.Nombre -Action $accion -Trigger $disparador `
         -Settings $opciones -Principal $principal -Description $t.Que | Out-Null
     Write-Host "Creada: $($t.Nombre)  ->  $($t.Script)"
+}
+
+# Sincronizacion del panel. Tres diferencias con los bots, a proposito:
+#  - Repite cada 4 horas, no cada 2 minutos: no es un proceso que haya que revivir,
+#    es una corrida que empieza y termina.
+#  - ExecutionTimeLimit de 30 minutos: una corrida normal tarda segundos; si se
+#    cuelga (red), Windows la corta y la proxima arranca limpia.
+#  - Sin AtLogOn: StartWhenAvailable ya cubre "la PC estaba apagada a la hora",
+#    corre apenas puede.
+# Misma trampa que arriba con Duration: vacio = repetir para siempre.
+$accionPanel = New-ScheduledTaskAction -Execute $pythonw -Argument $panel.Script -WorkingDirectory $proyecto
+$cadaCuatroHoras = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(-1) `
+    -RepetitionInterval (New-TimeSpan -Hours 4)
+$cadaCuatroHoras.Repetition.Duration = $null
+$cadaCuatroHoras.Repetition.StopAtDurationEnd = $false
+$opcionesPanel = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
+    -MultipleInstances IgnoreNew
+$principalPanel = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+if (Get-ScheduledTask -TaskName $panel.Nombre -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName $panel.Nombre -Confirm:$false
+}
+Register-ScheduledTask -TaskName $panel.Nombre -Action $accionPanel -Trigger $cadaCuatroHoras `
+    -Settings $opcionesPanel -Principal $principalPanel -Description $panel.Que | Out-Null
+Write-Host "Creada: $($panel.Nombre)  ->  $($panel.Script)"
+
+if ($SoloPanel) {
+    Write-Host ""
+    Write-Host "Listo. El panel se sincroniza cada 4 horas. Para correrlo AHORA:"
+    Write-Host "    Start-ScheduledTask -TaskName ShopeePanelSync"
+    return
 }
 
 Write-Host ""
