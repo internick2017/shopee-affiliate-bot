@@ -176,6 +176,14 @@ class Supabase:
                               headers={**self._headers, "Prefer": "return=minimal"}, timeout=60)
         _sin_error(r, tabla)
 
+    def borrar_anteriores(self, tabla: str, columna: str, limite: str) -> None:
+        """Borra las filas con `columna` menor que `limite`. Va por `params` para que
+        el `+` de una fecha con zona no llegue como un espacio."""
+        r = self._http.delete(f"{self._url}/rest/v1/{tabla}",
+                              params={columna: f"lt.{limite}"},
+                              headers={**self._headers, "Prefer": "return=minimal"}, timeout=60)
+        _sin_error(r, tabla)
+
     def leer(self, tabla: str, columnas: str) -> list[dict]:
         r = self._http.get(f"{self._url}/rest/v1/{tabla}?select={columnas}",
                            headers=self._headers, timeout=60)
