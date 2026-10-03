@@ -89,6 +89,10 @@ La parte de videos de `sincronizar` pasa a tener dos pasos, en este orden:
    sigue.
 2. **Subir los videos** como hoy. Como el paso 1 ya dejó las marcas en `grabados.db`,
    `publicado_en` sube completo.
+3. **Consumir las marcas** (agregado en la revisión final). Con los videos ya arriba, borra
+   de `publicacao` las marcas cuyo video quedó publicado en la PC. Sin esto, desmarcar un
+   video por el chat se revertía en la corrida siguiente, porque la marca seguía ahí. Si la
+   subida de videos falla, no se borra ninguna.
 
 `VideosStore` necesita marcar sin pisar: un `marcar_publicado` que no cambie un video ya
 publicado (variante nueva o parámetro; lo decide el plan). El `marcar_publicado` que usa
@@ -140,9 +144,12 @@ Usa el mismo selector de período del Início (compartido por el contexto).
 ### Reglas de cálculo
 
 - **Venta del video:** una venta del mismo producto (`cuenta`, `item_id`), con origen
-  Shopee Video, no cancelada, con `compra_en` igual o posterior a la publicación. Si el
-  video no tiene fecha de publicación, cuenta desde que se grabó (`grabado_en`), porque
-  antes de grabarlo seguro no existía.
+  Shopee Video, no cancelada, con `compra_en` igual o posterior a la grabación
+  (`grabado_en`). Cambiado en la revisión final: antes contaba desde la publicación, pero
+  las marcas suelen llegar tarde (ponerse al día con videos que ya estaban en el aire) y
+  marcar un video le borraba las ventas que ya había hecho.
+- **Días hasta la primera venta:** desde la publicación. Si la primera venta es anterior a
+  la marca, la marca llegó tarde y el dato queda vacío.
 - **Días hasta la primera venta, "sin ventas" y "% que vendieron":** solo videos con fecha
   de publicación. Sin ella no hay desde cuándo contar.
 - **Herramienta:** se agrupa por prefijo. "Flow Music" es Flow Music; cualquier otra que

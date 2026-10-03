@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from datetime import UTC, datetime
 
 import pytest
@@ -148,6 +149,12 @@ class _FakeSupabase:
         self.registros = []
         self._falla_en = falla_en
         self._marcas = marcas or []
+        self.borrados = []
+        self.orden = []
+
+    def borrar(self, tabla, **filtros):
+        self.borrados.append((tabla, filtros))
+        self.orden.append(("borrar", tabla))
 
     def leer(self, tabla, columnas):
         if tabla == self._falla_en:
@@ -158,6 +165,7 @@ class _FakeSupabase:
         if tabla == self._falla_en:
             raise RuntimeError("supabase caido")
         self.upserts.append((tabla, filas, conflicto))
+        self.orden.append(("upsert", tabla))
 
     def registrar(self, cuenta, empezo, ok, filas, error):
         self.registros.append({"cuenta": cuenta, "ok": ok, "filas": filas, "error": error})
@@ -170,6 +178,12 @@ class _FakeHttp:
 
     def post(self, url, *, json, headers, timeout):
         self.llamadas.append({"url": url, "json": json, "headers": headers})
+        r = _Resp(None, status=self.status)
+        r.text = self.body
+        return r
+
+    def delete(self, url, *, headers, timeout):
+        self.llamadas.append({"url": url, "headers": headers, "metodo": "DELETE"})
         r = _Resp(None, status=self.status)
         r.text = self.body
         return r
@@ -353,30 +367,30 @@ def _marca(fecha="2026-10-02T12:00:00+00:00", **campos):
 
 def test_traer_marcas_marca_sin_publicar(tmp_path):
     store = _store(tmp_path)
-    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) == (1, None)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) [::2] == (1, None)
     assert store.listar()[0].publicado_ts == datetime(2026, 10, 2, 12, tzinfo=UTC).timestamp()
 
 
 def test_traer_marcas_acepta_fecha_con_Z(tmp_path):
     store = _store(tmp_path)
-    assert traer_marcas(_FakeSupabase(marcas=[_marca("2026-10-02T12:00:00Z")]), store) == (1, None)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca("2026-10-02T12:00:00Z")]), store) [::2] == (1, None)
     assert store.listar()[0].publicado_ts == datetime(2026, 10, 2, 12, tzinfo=UTC).timestamp()
 
 
 def test_traer_marcas_no_pisa_publicado(tmp_path):
     store = _store(tmp_path, publicado_ts=1_700_000_000)
-    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) == (0, None)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) [::2] == (0, None)
     assert store.listar()[0].publicado_ts == 1_700_000_000
 
 
 def test_traer_marcas_video_desconocido_se_saltea(tmp_path):
     store = _store(tmp_path)
-    assert traer_marcas(_FakeSupabase(marcas=[_marca(item_id=999)]), store) == (0, None)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca(item_id=999)]), store) [::2] == (0, None)
     assert store.listar()[0].publicado_ts is None
 
 
 def test_traer_marcas_si_supabase_falla_devuelve_error(tmp_path):
-    marcadas, error = traer_marcas(_FakeSupabase(falla_en="publicacao"), _store(tmp_path))
+    marcadas, _, error = traer_marcas(_FakeSupabase(falla_en="publicacao"), _store(tmp_path))
     assert marcadas == 0
     assert "supabase caido" in (error or "")
 
@@ -389,3 +403,53 @@ def test_error_de_marcas_marca_la_corrida_de_videos():
     assert db.upserts[0][0] == "video"
     assert r["videos"] is False
     assert "x" in (db.registros[0]["error"] or "")
+
+
+# --- Arreglos de la revision final de la etapa 2 ---
+
+
+def test_traer_marcas_devuelve_las_consumidas(tmp_path):
+    """Consumida = el video ya quedo publicado en la PC (recien marcado o de antes).
+    Una marca de un video desconocido no se consume: se sigue avisando."""
+    store = _store(tmp_path)
+    store.registrar(8, canal="lanny")
+    store.marcar_publicado(8, "lanny", cuando=1_700_000_000)
+    marcas = [_marca(), _marca(item_id=8), _marca(item_id=999)]
+    assert traer_marcas(_FakeSupabase(marcas=marcas), store) == (1, [("lanny", 7), ("lanny", 8)], None)
+
+
+class _StoreBloqueado:
+    def ya_tiene_video(self, item_id, canal):
+        return True
+
+    def marcar_si_falta(self, item_id, canal, *, cuando):
+        raise sqlite3.OperationalError("database is locked")
+
+
+def test_traer_marcas_error_al_recorrer_no_frena_la_corrida():
+    marcadas, consumidas, error = traer_marcas(_FakeSupabase(marcas=[_marca()]), _StoreBloqueado())
+    assert (marcadas, consumidas) == (0, [])
+    assert "database is locked" in (error or "")
+
+
+def test_borrar_hace_delete_con_filtros():
+    http = _FakeHttp(status=204)
+    Supabase("https://x", "k", http=http).borrar("publicacao", canal="lanny", item_id=7)
+    assert http.llamadas[0]["metodo"] == "DELETE"
+    assert http.llamadas[0]["url"] == "https://x/rest/v1/publicacao?canal=eq.lanny&item_id=eq.7"
+
+
+def test_marcas_consumidas_se_borran_despues_de_subir_los_videos():
+    """Asi, si despues se desmarca por el chat, la proxima corrida no la revive."""
+    db = _FakeSupabase()
+    sincronizar({}, [_video(canal="lanny")], db, ahora=_T, pausa=0,
+                marcas_consumidas=[("lanny", 7)])
+    assert db.borrados == [("publicacao", {"canal": "lanny", "item_id": 7})]
+    assert db.orden == [("upsert", "video"), ("borrar", "publicacao")]
+
+
+def test_si_falla_subir_los_videos_no_se_borran_las_marcas():
+    db = _FakeSupabase(falla_en="video")
+    sincronizar({}, [_video(canal="lanny")], db, ahora=_T, pausa=0,
+                marcas_consumidas=[("lanny", 7)])
+    assert db.borrados == []

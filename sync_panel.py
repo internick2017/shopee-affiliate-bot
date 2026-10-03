@@ -48,7 +48,7 @@ def main() -> int:
     store = VideosStore(_RAIZ / "grabados.db")
     # Primero las marcas del panel: asi `publicado_en` sube completo y la copia de
     # los videos nunca pisa una marca.
-    marcadas, error_marcas = traer_marcas(db, store)
+    marcadas, consumidas, error_marcas = traer_marcas(db, store)
     if error_marcas:
         logger.error(error_marcas)
     else:
@@ -56,7 +56,7 @@ def main() -> int:
     videos = store.listar(cuantos=100_000)
 
     resultado = sincronizar(cuentas, videos, db, ahora=datetime.now(UTC),
-                            error_marcas=error_marcas)
+                            error_marcas=error_marcas, marcas_consumidas=consumidas)
     for nombre, ok in resultado.items():
         (logger.info if ok else logger.error)("%s: %s", nombre, "ok" if ok else "FALLO")
     return 0 if all(resultado.values()) else 1
