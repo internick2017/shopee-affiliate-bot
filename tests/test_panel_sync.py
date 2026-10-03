@@ -112,6 +112,14 @@ def test_video_publicado_tiene_fecha():
     assert fila["publicado_en"] == "2026-09-30T13:23:00+00:00"
 
 
+def test_video_sube_su_legenda():
+    assert filas_de_videos([_video(legenda="Cooler. #gamer")])[0]["legenda"] == "Cooler. #gamer"
+
+
+def test_video_sin_legenda_sube_null():
+    assert filas_de_videos([_video()])[0]["legenda"] is None
+
+
 # --- Lectura paginada, escritura en Supabase y sincronizacion (Task 3) ---
 
 class _Resp:

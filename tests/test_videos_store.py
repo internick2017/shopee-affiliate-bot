@@ -186,3 +186,54 @@ def test_marcar_si_falta_no_pisa_uno_publicado(store):
 
 def test_marcar_si_falta_inexistente(store):
     assert store.marcar_si_falta(999, "lanny", cuando=_HOY) is False
+
+
+# --- legenda: el texto que se pega en Shopee Video al publicar ---
+
+
+def test_registrar_guarda_la_legenda(store):
+    store.registrar(1, canal="lanny", legenda="Vaso decorativo. #decoracao")
+    assert store.listar()[0].legenda == "Vaso decorativo. #decoracao"
+
+
+def test_registrar_sin_legenda_no_borra_la_que_habia(store):
+    """Regenerar un link o rehacer el video no tiene por que perder el texto."""
+    store.registrar(1, canal="lanny", legenda="Vaso decorativo. #decoracao")
+    store.registrar(1, canal="lanny", link="https://s.shopee.com.br/nuevo")
+    assert store.listar()[0].legenda == "Vaso decorativo. #decoracao"
+
+
+def test_poner_legenda_en_un_video_existente(store):
+    store.registrar(1, canal="nick")
+    assert store.poner_legenda(1, "nick", "Mouse sem fio. #mouse") is True
+    assert store.listar()[0].legenda == "Mouse sem fio. #mouse"
+
+
+def test_poner_legenda_inexistente(store):
+    assert store.poner_legenda(999, "nick", "x") is False
+
+
+def test_poner_legenda_rechaza_mas_de_150_caracteres(store):
+    """Es el limite del campo de Shopee: una legenda mas larga no se puede pegar."""
+    store.registrar(1, canal="nick")
+    with pytest.raises(ValueError):
+        store.poner_legenda(1, "nick", "x" * 151)
+    assert store.listar()[0].legenda is None
+
+
+def test_base_vieja_sin_columna_legenda_se_migra(tmp_path):
+    import sqlite3
+    ruta = tmp_path / "vieja.db"
+    c = sqlite3.connect(ruta)
+    c.execute(
+        "CREATE TABLE videos_producidos ("
+        "item_id INTEGER NOT NULL, canal TEXT NOT NULL, ts REAL NOT NULL, "
+        "titulo TEXT, link TEXT, precio REAL, comision_pct REAL, "
+        "herramienta TEXT, marca TEXT, archivo TEXT, publicado_ts REAL, "
+        "PRIMARY KEY (item_id, canal))")
+    c.execute("INSERT INTO videos_producidos (item_id, canal, ts) VALUES (1, 'nick', 1)")
+    c.commit()
+    c.close()
+    store = VideosStore(ruta)
+    assert store.listar()[0].legenda is None
+    assert store.poner_legenda(1, "nick", "ok") is True

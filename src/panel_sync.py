@@ -99,6 +99,7 @@ def filas_de_videos(videos: list[VideoProducido]) -> list[dict]:
             "precio": v.precio,
             "grabado_en": _iso(v.ts),
             "publicado_en": _iso(v.publicado_ts),
+            "legenda": v.legenda,
         }
         for v in videos
         if v.canal in CUENTA_DE_CANAL
