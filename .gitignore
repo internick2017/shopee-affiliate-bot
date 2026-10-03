@@ -41,3 +41,9 @@ conteo_*.txt
 
 # Videos entregados (Shopee Video Flow) - pesados, no van al repo
 videos_entregados/
+
+# Specs y planes de diseno: viven en repos privados, este es publico
+docs/superpowers/
+
+# Tareas programadas personales de Nick (datos de sus ventas, no van al repo publico)
+tareas_locales/

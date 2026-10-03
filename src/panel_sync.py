@@ -2,7 +2,7 @@
 
 El panel se abre desde el celular, pero las claves de Shopee y `grabados.db` viven
 en esta PC. Este modulo es el puente: lee de aca y escribe alla. El panel solo lee.
-Diseno completo: docs/superpowers/specs/2026-10-02-panel-reportes-design.md.
+Diseno completo: docs/superpowers/specs/2026-10-02-panel-reportes-design.md en el repo del panel.
 
 Esta parte es pura (sin red): convierte lo que devuelve la API de Shopee y lo que
 guarda `VideosStore` en filas con los nombres de columna de las tablas `venta` y
