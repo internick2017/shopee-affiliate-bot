@@ -225,6 +225,18 @@ class VideosStore:
         self._conn.commit()
         return cur.rowcount > 0
 
+    def marcar_si_falta(self, item_id: int, canal: str, *, cuando: float) -> bool:
+        """Como `marcar_publicado`, pero sin pisar una fecha ya puesta: lo usa la
+        sincronizacion para traer las marcas del panel, y la fecha mas vieja es la
+        real. True si lo marco."""
+        cur = self._conn.execute(
+            "UPDATE videos_producidos SET publicado_ts = ? "
+            "WHERE item_id = ? AND canal = ? AND publicado_ts IS NULL",
+            (cuando, int(item_id), canal),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
     def sin_publicar(self, canal: str | None = None) -> list[VideoProducido]:
         """Videos producidos que todavia no salieron. Son plata parada: el costo
         ya se pago."""

@@ -3,13 +3,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.grabados_store import VideoProducido
+from src.grabados_store import VideoProducido, VideosStore
 from src.panel_sync import (
     Supabase,
     filas_de_ventas,
     filas_de_videos,
     leer_conversiones,
     sincronizar,
+    traer_marcas,
 )
 
 _T = datetime(2026, 10, 2, tzinfo=UTC)
@@ -142,10 +143,16 @@ def _shopee(paginas, consultas=None):
 
 
 class _FakeSupabase:
-    def __init__(self, falla_en=None):
+    def __init__(self, falla_en=None, marcas=None):
         self.upserts = []
         self.registros = []
         self._falla_en = falla_en
+        self._marcas = marcas or []
+
+    def leer(self, tabla, columnas):
+        if tabla == self._falla_en:
+            raise RuntimeError("supabase caido")
+        return self._marcas
 
     def upsert(self, tabla, filas, conflicto):
         if tabla == self._falla_en:
@@ -165,6 +172,13 @@ class _FakeHttp:
         self.llamadas.append({"url": url, "json": json, "headers": headers})
         r = _Resp(None, status=self.status)
         r.text = self.body
+        return r
+
+    def get(self, url, *, headers, timeout):
+        self.llamadas.append({"url": url, "headers": headers})
+        r = _Resp(self.body or [], status=self.status)
+        if self.status >= 300:
+            r.text = self.body
         return r
 
 
@@ -304,3 +318,74 @@ def test_filas_repetidas_en_la_misma_corrida_se_mandan_una_vez():
     filas = db.upserts[0][1]
     assert len(filas) == 1 and filas[0]["comision"] == 2.0
     assert db.registros[0]["filas"] == 1
+
+
+# --- Marcas de publicado que vienen del panel (etapa 2) ---
+
+
+def test_leer_hace_get_con_select():
+    http = _FakeHttp(status=200, body=[{"canal": "lanny"}])
+    filas = Supabase("https://x", "k", http=http).leer("publicacao", "canal,item_id,publicado_en")
+    assert http.llamadas[0]["url"] == "https://x/rest/v1/publicacao?select=canal,item_id,publicado_en"
+    assert http.llamadas[0]["headers"]["apikey"] == "k"
+    assert filas == [{"canal": "lanny"}]
+
+
+def test_leer_error_no_incluye_la_llave():
+    http = _FakeHttp(status=401, body='{"message":"Invalid API key"}')
+    with pytest.raises(RuntimeError) as e:
+        Supabase("https://x", "LLAVE-SECRETA", http=http).leer("publicacao", "canal")
+    assert "401" in str(e.value)
+    assert "LLAVE-SECRETA" not in str(e.value)
+
+
+def _store(tmp_path, publicado_ts=None):
+    store = VideosStore(tmp_path / "g.db")
+    store.registrar(7, canal="lanny")
+    if publicado_ts is not None:
+        store.marcar_publicado(7, "lanny", cuando=publicado_ts)
+    return store
+
+
+def _marca(fecha="2026-10-02T12:00:00+00:00", **campos):
+    return {"canal": "lanny", "item_id": 7, "publicado_en": fecha, **campos}
+
+
+def test_traer_marcas_marca_sin_publicar(tmp_path):
+    store = _store(tmp_path)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) == (1, None)
+    assert store.listar()[0].publicado_ts == datetime(2026, 10, 2, 12, tzinfo=UTC).timestamp()
+
+
+def test_traer_marcas_acepta_fecha_con_Z(tmp_path):
+    store = _store(tmp_path)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca("2026-10-02T12:00:00Z")]), store) == (1, None)
+    assert store.listar()[0].publicado_ts == datetime(2026, 10, 2, 12, tzinfo=UTC).timestamp()
+
+
+def test_traer_marcas_no_pisa_publicado(tmp_path):
+    store = _store(tmp_path, publicado_ts=1_700_000_000)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca()]), store) == (0, None)
+    assert store.listar()[0].publicado_ts == 1_700_000_000
+
+
+def test_traer_marcas_video_desconocido_se_saltea(tmp_path):
+    store = _store(tmp_path)
+    assert traer_marcas(_FakeSupabase(marcas=[_marca(item_id=999)]), store) == (0, None)
+    assert store.listar()[0].publicado_ts is None
+
+
+def test_traer_marcas_si_supabase_falla_devuelve_error(tmp_path):
+    marcadas, error = traer_marcas(_FakeSupabase(falla_en="publicacao"), _store(tmp_path))
+    assert marcadas == 0
+    assert "supabase caido" in (error or "")
+
+
+def test_error_de_marcas_marca_la_corrida_de_videos():
+    """Si no se pudieron traer las marcas, los videos se suben igual pero la
+    corrida queda en rojo para que se vea en el Inicio."""
+    db = _FakeSupabase()
+    r = sincronizar({}, [_video()], db, ahora=_T, pausa=0, error_marcas="x")
+    assert db.upserts[0][0] == "video"
+    assert r["videos"] is False
+    assert "x" in (db.registros[0]["error"] or "")

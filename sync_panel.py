@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 from src.grabados_store import VideosStore
 from src.logging_setup import configurar_logging
-from src.panel_sync import Supabase, sincronizar
+from src.panel_sync import Supabase, sincronizar, traer_marcas
 
 _RAIZ = Path(__file__).resolve().parent
 
@@ -45,9 +45,18 @@ def main() -> int:
 
     cuentas = {c: (os.environ[a], os.environ[s]) for c, (a, s) in _CUENTAS.items()}
     db = Supabase(os.environ["SUPABASE_PANEL_URL"], os.environ["SUPABASE_PANEL_SERVICE_KEY"])
-    videos = VideosStore(_RAIZ / "grabados.db").listar(cuantos=100_000)
+    store = VideosStore(_RAIZ / "grabados.db")
+    # Primero las marcas del panel: asi `publicado_en` sube completo y la copia de
+    # los videos nunca pisa una marca.
+    marcadas, error_marcas = traer_marcas(db, store)
+    if error_marcas:
+        logger.error(error_marcas)
+    else:
+        logger.info("Marcas del panel aplicadas: %d", marcadas)
+    videos = store.listar(cuantos=100_000)
 
-    resultado = sincronizar(cuentas, videos, db, ahora=datetime.now(UTC))
+    resultado = sincronizar(cuentas, videos, db, ahora=datetime.now(UTC),
+                            error_marcas=error_marcas)
     for nombre, ok in resultado.items():
         (logger.info if ok else logger.error)("%s: %s", nombre, "ok" if ok else "FALLO")
     return 0 if all(resultado.values()) else 1
