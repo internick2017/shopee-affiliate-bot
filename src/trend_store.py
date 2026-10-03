@@ -16,6 +16,7 @@ muestreo dos veces el mismo día actualice en vez de duplicar.
 from __future__ import annotations
 
 import sqlite3
+import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,10 @@ class TrendStore:
             "titulo TEXT, link TEXT,"
             "PRIMARY KEY (item_id, dia))"
         )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS alertas_precio ("
+            "item_id INTEGER NOT NULL, dia INTEGER NOT NULL, PRIMARY KEY (item_id, dia))"
+        )
         self._conn.commit()
 
     def registrar(
@@ -87,6 +92,42 @@ class TrendStore:
              float(comision_pct), titulo, link),
         )
         self._conn.commit()
+
+    def precios_de_referencia(
+        self,
+        *,
+        ventana_dias: int = 14,
+        minimo_muestras: int = 3,
+        now: float | None = None,
+    ) -> dict[int, float]:
+        """El precio normal de cada producto: la mediana de sus dias previos a hoy
+        dentro de la ventana. La mediana aguanta una oferta puntual que un promedio
+        arrastraria. Con menos de `minimo_muestras` dias no hay precio normal."""
+        now = time.time() if now is None else now
+        hoy = int(now // _DIA)
+        precios: dict[int, list[float]] = {}
+        for item_id, precio in self._conn.execute(
+            "SELECT item_id, precio FROM ventas_diarias "
+            "WHERE dia >= ? AND dia < ? AND precio > 0",
+            (hoy - ventana_dias, hoy),
+        ):
+            precios.setdefault(int(item_id), []).append(float(precio))
+        return {
+            item_id: statistics.median(ps)
+            for item_id, ps in precios.items()
+            if len(ps) >= minimo_muestras
+        }
+
+    def marcar_alertado(self, item_id: int, *, now: float | None = None) -> bool:
+        """Anota que hoy se aviso de este producto. False si ya estaba anotado: el
+        muestreo puede correr varias veces al dia y el aviso va una sola."""
+        now = time.time() if now is None else now
+        cur = self._conn.execute(
+            "INSERT OR IGNORE INTO alertas_precio (item_id, dia) VALUES (?, ?)",
+            (int(item_id), int(now // _DIA)),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
 
     def dias_con_datos(self) -> int:
         """Cuántos días distintos hay muestreados. Con menos de 2 no hay derivada
