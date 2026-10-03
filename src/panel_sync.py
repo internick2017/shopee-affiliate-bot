@@ -7,6 +7,9 @@ Diseno completo: docs/superpowers/specs/2026-10-02-panel-reportes-design.md.
 Esta parte es pura (sin red): convierte lo que devuelve la API de Shopee y lo que
 guarda `VideosStore` en filas con los nombres de columna de las tablas `venta` y
 `video` del panel.
+
+Desde la etapa 2 el panel tambien escribe: las marcas de "Publicado" van a la tabla
+`publicacao`, y `traer_marcas` las baja a `grabados.db` antes de subir los videos.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from typing import Any
 
 import requests
 
-from .grabados_store import VideoProducido
+from .grabados_store import VideoProducido, VideosStore
 from .shopee_resolver import _graphql_call
 
 logger = logging.getLogger(__name__)
@@ -145,6 +148,12 @@ def leer_conversiones(
         time.sleep(pausa)
 
 
+def _sin_error(r: Any, ruta: str) -> None:
+    if r.status_code >= 300:
+        raise RuntimeError(f"Supabase respondio {r.status_code} en {ruta.split('?')[0]}: "
+                           f"{(r.text or '')[:300]}")
+
+
 class Supabase:
     """Escritura en el panel por PostgREST, con la llave de servicio (salta RLS).
     Esa llave nunca aparece en un error ni en el log."""
@@ -158,9 +167,19 @@ class Supabase:
     def _post(self, ruta: str, cuerpo: Any, prefer: str) -> None:
         r = self._http.post(f"{self._url}/rest/v1/{ruta}", json=cuerpo,
                             headers={**self._headers, "Prefer": prefer}, timeout=60)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Supabase respondio {r.status_code} en {ruta.split('?')[0]}: "
-                               f"{(r.text or '')[:300]}")
+        _sin_error(r, ruta)
+
+    def borrar(self, tabla: str, **filtros: Any) -> None:
+        condiciones = "&".join(f"{k}=eq.{v}" for k, v in filtros.items())
+        r = self._http.delete(f"{self._url}/rest/v1/{tabla}?{condiciones}",
+                              headers={**self._headers, "Prefer": "return=minimal"}, timeout=60)
+        _sin_error(r, tabla)
+
+    def leer(self, tabla: str, columnas: str) -> list[dict]:
+        r = self._http.get(f"{self._url}/rest/v1/{tabla}?select={columnas}",
+                           headers=self._headers, timeout=60)
+        _sin_error(r, tabla)
+        return r.json()
 
     def upsert(self, tabla: str, filas: list[dict], conflicto: str) -> None:
         for i in range(0, len(filas), _LOTE):
@@ -186,6 +205,33 @@ def _registrar(db: Any, cuenta: str | None, empezo: datetime, ok: bool, filas: i
         logger.error("No pude registrar la corrida de %s: %s", cuenta or "videos", exc)
 
 
+def traer_marcas(db: Any, store: VideosStore) -> tuple[int, list[tuple[str, int]], str | None]:
+    """Baja a `grabados.db` los videos marcados como publicados desde el panel.
+    Nunca pisa una fecha ya puesta. Devuelve (cuantos marco, consumidas, error).
+
+    Consumidas = marcas cuyo video ya quedo publicado en esta PC: `sincronizar` las
+    borra del panel despues de subir los videos, asi una marca deshecha por el chat
+    no revive en la corrida siguiente. Un video que no existe en esta PC se loguea y
+    no se consume. Ningun error de aca frena la corrida: se devuelve."""
+    marcadas = 0
+    consumidas: list[tuple[str, int]] = []
+    try:
+        marcas = db.leer("publicacao", "canal,item_id,publicado_en")
+        for m in marcas:
+            item_id, canal = int(m["item_id"]), m["canal"]
+            if not store.ya_tiene_video(item_id, canal):
+                logger.warning("Marca del panel para un video que no esta en la PC: %s/%s",
+                               canal, item_id)
+                continue
+            cuando = datetime.fromisoformat(m["publicado_en"]).timestamp()
+            if store.marcar_si_falta(item_id, canal, cuando=cuando):
+                marcadas += 1
+            consumidas.append((canal, item_id))
+    except Exception as exc:  # noqa: BLE001
+        return marcadas, consumidas, f"No pude traer las marcas del panel: {exc}"
+    return marcadas, consumidas, None
+
+
 def sincronizar(
     cuentas: dict[str, tuple[str, str]],
     videos: list[VideoProducido],
@@ -194,6 +240,8 @@ def sincronizar(
     ahora: datetime,
     http_post: Callable[..., object] | None = None,
     pausa: float = _PAUSA,
+    error_marcas: str | None = None,
+    marcas_consumidas: list[tuple[str, int]] = (),
 ) -> dict[str, bool]:
     """Una corrida completa. `cuentas` = {cuenta: (app_id, secret)}. Se releen los
     90 dias enteros cada vez porque una venta puede seguir pendiente semanas: leer
@@ -218,9 +266,14 @@ def sincronizar(
     empezo = datetime.now(UTC)
     desconocidos = sorted({v.canal for v in videos if v.canal not in CUENTA_DE_CANAL})
     aviso = f"Canales sin cuenta en el panel: {', '.join(desconocidos)}" if desconocidos else None
+    if error_marcas:
+        aviso = f"{aviso}; {error_marcas}" if aviso else error_marcas
     try:
         filas_v = _sin_repetidas(filas_de_videos(videos), _CLAVE_VIDEO)
         db.upsert("video", filas_v, _CLAVE_VIDEO)
+        # Recien con el video arriba (y su `publicado_en`) la marca ya no hace falta.
+        for canal, item_id in marcas_consumidas:
+            db.borrar("publicacao", canal=canal, item_id=item_id)
         resultado["videos"] = aviso is None
         _registrar(db, None, empezo, aviso is None, len(filas_v), aviso)
     except Exception as exc:  # noqa: BLE001

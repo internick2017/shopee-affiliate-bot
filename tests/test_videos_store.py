@@ -165,3 +165,24 @@ def test_migracion_de_una_base_sin_la_columna(tmp_path):
     assert v.titulo == "Viejo"
     assert v.publicado is False
     assert store.marcar_publicado(7, "nick") is True
+
+
+# --- marcas que vienen del panel ---
+
+
+def test_marcar_si_falta_marca_uno_sin_publicar(store):
+    store.registrar(1, canal="lanny")
+    assert store.marcar_si_falta(1, "lanny", cuando=_HOY) is True
+    assert store.listar()[0].publicado_ts == _HOY
+
+
+def test_marcar_si_falta_no_pisa_uno_publicado(store):
+    """La fecha mas vieja es la real: una marca del panel no corre una ya puesta."""
+    store.registrar(1, canal="lanny")
+    store.marcar_publicado(1, "lanny", cuando=_HOY)
+    assert store.marcar_si_falta(1, "lanny", cuando=_HOY + 999) is False
+    assert store.listar()[0].publicado_ts == _HOY
+
+
+def test_marcar_si_falta_inexistente(store):
+    assert store.marcar_si_falta(999, "lanny", cuando=_HOY) is False
