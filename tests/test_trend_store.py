@@ -115,3 +115,10 @@ def test_una_tanda_con_una_muestra_rota_no_guarda_nada(store, tmp_path):
 def test_una_tanda_vacia_no_rompe(store, tmp_path):
     store.registrar_muestras([], now=_HOY)
     assert _filas_en_disco(tmp_path) == 0
+
+
+def test_las_ideas_se_publican_una_vez_por_dia(store):
+    assert store.ideas_publicadas_hoy(now=_HOY) is False
+    store.marcar_ideas_publicadas(now=_HOY)
+    assert store.ideas_publicadas_hoy(now=_HOY + 3600) is True
+    assert store.ideas_publicadas_hoy(now=_HOY + _DIA) is False
