@@ -1,8 +1,10 @@
 """El tiempo se inyecta con `now` para no depender del reloj ni esperar dias."""
 
+import sqlite3
+
 import pytest
 
-from src.trend_store import TrendStore
+from src.trend_store import Muestra, TrendStore
 
 _DIA = 86400
 _HOY = 1_700_000_000
@@ -88,3 +90,28 @@ def test_conserva_datos_del_producto(store):
     t = store.tendencias(now=_HOY)[0]
     assert (t.titulo, t.precio, t.comision_pct, t.link) == (
         "Kit X", 19.9, 23.0, "https://s.shopee.com.br/x")
+
+
+def _filas_en_disco(tmp_path):
+    """Lo que ve otro proceso: una conexion aparte solo lee lo ya escrito a disco."""
+    otra = sqlite3.connect(tmp_path / "t.db")
+    try:
+        return otra.execute("SELECT COUNT(*) FROM ventas_diarias").fetchone()[0]
+    finally:
+        otra.close()
+
+
+def test_una_tanda_queda_guardada_entera(store, tmp_path):
+    store.registrar_muestras([Muestra(1, 10), Muestra(2, 20)], now=_HOY)
+    assert _filas_en_disco(tmp_path) == 2
+
+
+def test_una_tanda_con_una_muestra_rota_no_guarda_nada(store, tmp_path):
+    with pytest.raises(sqlite3.IntegrityError):
+        store.registrar_muestras([Muestra(1, 10), Muestra(2, None)], now=_HOY)
+    assert _filas_en_disco(tmp_path) == 0
+
+
+def test_una_tanda_vacia_no_rompe(store, tmp_path):
+    store.registrar_muestras([], now=_HOY)
+    assert _filas_en_disco(tmp_path) == 0

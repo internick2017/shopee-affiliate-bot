@@ -18,6 +18,7 @@ from __future__ import annotations
 import sqlite3
 import statistics
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,6 +53,18 @@ class Tendencia:
         return (self.nuevas / self.ventas_antes * 100) if self.ventas_antes > 0 else 0.0
 
 
+@dataclass(frozen=True)
+class Muestra:
+    """Lo que se anota de un producto en un dia."""
+
+    item_id: int
+    ventas: int
+    titulo: str = ""
+    precio: float = 0.0
+    comision_pct: float = 0.0
+    link: str = ""
+
+
 class TrendStore:
     def __init__(self, db_path: str | Path):
         self._conn = sqlite3.connect(str(db_path))
@@ -68,6 +81,24 @@ class TrendStore:
         )
         self._conn.commit()
 
+    def registrar_muestras(self, muestras: Iterable[Muestra], *, now: float | None = None) -> None:
+        """Guarda la tanda de hoy en una sola escritura a disco: entra entera o no
+        entra. Cada escritura espera a que el disco confirme, y de a una fila el
+        muestreo completo tardaba 8 minutos. Correrlo dos veces el mismo dia pisa
+        la muestra anterior en vez de duplicar: la clave incluye el dia."""
+        now = time.time() if now is None else now
+        dia = int(now // _DIA)
+        with self._conn:
+            self._conn.executemany(
+                "INSERT INTO ventas_diarias (item_id, dia, ts, ventas, precio, comision_pct,"
+                " titulo, link) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(item_id, dia) DO UPDATE SET ts=excluded.ts, ventas=excluded.ventas,"
+                " precio=excluded.precio, comision_pct=excluded.comision_pct,"
+                " titulo=excluded.titulo, link=excluded.link",
+                [(m.item_id, dia, now, m.ventas, m.precio, m.comision_pct, m.titulo, m.link)
+                 for m in muestras],
+            )
+
     def registrar(
         self,
         item_id: int,
@@ -79,19 +110,11 @@ class TrendStore:
         link: str = "",
         now: float | None = None,
     ) -> None:
-        """Guarda la muestra de hoy. Correrlo dos veces el mismo día pisa la
-        anterior en vez de duplicar: la clave incluye el día."""
-        now = time.time() if now is None else now
-        self._conn.execute(
-            "INSERT INTO ventas_diarias (item_id, dia, ts, ventas, precio, comision_pct,"
-            " titulo, link) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(item_id, dia) DO UPDATE SET ts=excluded.ts, ventas=excluded.ventas,"
-            " precio=excluded.precio, comision_pct=excluded.comision_pct,"
-            " titulo=excluded.titulo, link=excluded.link",
-            (int(item_id), int(now // _DIA), now, int(ventas), float(precio),
-             float(comision_pct), titulo, link),
+        """Una sola muestra: `registrar_muestras` con una tanda de uno."""
+        self.registrar_muestras(
+            [Muestra(int(item_id), int(ventas), titulo, float(precio), float(comision_pct), link)],
+            now=now,
         )
-        self._conn.commit()
 
     def precios_de_referencia(
         self,
@@ -117,6 +140,14 @@ class TrendStore:
             for item_id, ps in precios.items()
             if len(ps) >= minimo_muestras
         }
+
+    def ya_alertado(self, item_id: int, *, now: float | None = None) -> bool:
+        """Si hoy ya se aviso de este producto."""
+        now = time.time() if now is None else now
+        return self._conn.execute(
+            "SELECT 1 FROM alertas_precio WHERE item_id = ? AND dia = ?",
+            (int(item_id), int(now // _DIA)),
+        ).fetchone() is not None
 
     def marcar_alertado(self, item_id: int, *, now: float | None = None) -> bool:
         """Anota que hoy se aviso de este producto. False si ya estaba anotado: el

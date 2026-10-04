@@ -1,6 +1,12 @@
 import pytest
 
-from src.price_alerts import Caida, detectar_caidas, enviar_telegram, texto_alerta
+from src.price_alerts import (
+    Caida,
+    avisar_caidas,
+    detectar_caidas,
+    enviar_telegram,
+    texto_alerta,
+)
 from src.trend_store import TrendStore
 
 _DIA = 86400
@@ -110,3 +116,37 @@ def test_un_producto_se_alerta_una_sola_vez_por_dia(store):
     assert store.marcar_alertado(1, now=_HOY) is True
     assert store.marcar_alertado(1, now=_HOY + 3600) is False
     assert store.marcar_alertado(1, now=_HOY + _DIA) is True
+
+
+def _caida(item_id=1):
+    return Caida(item_id=item_id, titulo="Fone", precio_antes=100.0, precio_ahora=50.0,
+                 comision_pct=10.0, link="https://s.shopee.com.br/x")
+
+
+def test_avisa_cada_caida_una_sola_vez_por_dia(store):
+    enviados = []
+    assert avisar_caidas([_caida(1), _caida(2)], store, enviados.append, now=_HOY) == 2
+    assert avisar_caidas([_caida(1), _caida(2)], store, enviados.append, now=_HOY + 3600) == 0
+    assert len(enviados) == 2
+
+
+def test_si_el_envio_falla_la_caida_se_reintenta_en_la_corrida_siguiente(store):
+    def sin_red(_texto):
+        raise ConnectionError("sin red")
+
+    enviados = []
+    assert avisar_caidas([_caida()], store, sin_red, now=_HOY) == 0
+    assert avisar_caidas([_caida()], store, enviados.append, now=_HOY + 3600) == 1
+    assert enviados == [texto_alerta(_caida())]
+
+
+def test_un_envio_que_falla_no_frena_los_demas(store):
+    enviados = []
+
+    def falla_el_primero(texto):
+        if not enviados:
+            enviados.append(None)
+            raise ConnectionError("sin red")
+        enviados.append(texto)
+
+    assert avisar_caidas([_caida(1), _caida(2)], store, falla_el_primero, now=_HOY) == 1

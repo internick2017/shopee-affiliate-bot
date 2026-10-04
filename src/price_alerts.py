@@ -8,10 +8,16 @@ El precio que da la API es el de la variacion mas barata, asi que una variacion
 nueva y barata tambien dispara la alerta. Por eso el mensaje pide conferir.
 """
 
+import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
 import requests
+
+from .trend_store import TrendStore
+
+logger = logging.getLogger(__name__)
 
 MINIMO_PCT = 40.0
 # Por debajo de esto una caida grande en porcentaje son centavos.
@@ -84,3 +90,27 @@ def enviar_telegram(token: str, chat_id: int | str, texto: str, *, http: Any = r
                   json={"chat_id": chat_id, "text": texto}, timeout=30)
     if r.status_code >= 300:
         raise RuntimeError(f"Telegram rechazo el mensaje ({r.status_code}): {r.text[:200]}")
+
+
+def avisar_caidas(
+    caidas: Iterable[Caida],
+    store: TrendStore,
+    enviar: Callable[[str], None],
+    *,
+    now: float | None = None,
+) -> int:
+    """Avisa de cada caida una sola vez por dia y devuelve cuantas salieron. La
+    caida se anota recien despues de enviada: si el envio falla, la corrida
+    siguiente la vuelve a intentar en vez de perderla."""
+    enviadas = 0
+    for c in caidas:
+        if store.ya_alertado(c.item_id, now=now):
+            continue
+        try:
+            enviar(texto_alerta(c))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("No pude enviar la alerta de %s: %s", c.item_id, exc)
+            continue
+        store.marcar_alertado(c.item_id, now=now)
+        enviadas += 1
+    return enviadas
