@@ -1,7 +1,9 @@
-"""Muestreo diario de ventas por producto, insumo del detector de tendencia.
+"""Muestreo de ventas y precios por producto, insumo del detector de tendencia.
 
-Corre una vez por día (ver el .vbs / tarea programada). Recorre las categorías
-mapeadas, pide los productos más vendidos de cada una y guarda su `sales` de hoy.
+Corre cada hora (tarea programada "Muestreo Shopee", que lanza muestreo-diario.vbs).
+Recorre las categorías mapeadas, pide los productos más vendidos de cada una y
+guarda su `sales` y su precio de hoy: las corridas del mismo día pisan la muestra
+anterior. De paso avisa por Telegram las caídas de precio y sube las ideas al panel.
 
 La derivada entre días es lo que dice qué está DESPEGANDO, que es distinto de lo
 que ya vendió mucho — ver el docstring de `src/trend_store.py`.
