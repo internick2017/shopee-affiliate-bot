@@ -20,10 +20,10 @@ from datetime import UTC, datetime
 from src.config import load_config
 from src.panel_ideas import filas_de_ideas, subir_ideas
 from src.panel_sync import Supabase
-from src.price_alerts import detectar_caidas, enviar_telegram, texto_alerta
+from src.price_alerts import avisar_caidas, detectar_caidas, enviar_telegram
 from src.product_ideas import CATEGORIAS, _CAMPOS, NOMBRES, resolver_categoria
 from src.shopee_resolver import _graphql_call
-from src.trend_store import TrendStore
+from src.trend_store import Muestra, TrendStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("snapshot")
@@ -40,6 +40,21 @@ def _muestrear(app_id: str, secret: str, cat_id: int) -> list[dict]:
     if not data:
         return []
     return ((data.get("productOfferV2") or {}).get("nodes")) or []
+
+
+def _a_muestra(nodo: dict) -> Muestra | None:
+    """Un nodo de productOfferV2 como muestra. None si viene sin itemId o con datos rotos."""
+    try:
+        return Muestra(
+            item_id=int(nodo["itemId"]),
+            ventas=int(nodo.get("sales") or 0),
+            titulo=nodo.get("productName") or "",
+            precio=float(nodo.get("price") or 0),
+            comision_pct=float(nodo.get("commissionRate") or 0) * 100,
+            link=nodo.get("offerLink") or "",
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _publicar_ideas(nodos_por_categoria: dict[int, list[dict]], store: TrendStore) -> None:
@@ -62,23 +77,14 @@ def _publicar_ideas(nodos_por_categoria: dict[int, list[dict]], store: TrendStor
 
 def _alertar_caidas(nodos: list[dict], store: TrendStore, token: str | None) -> None:
     """Avisa por Telegram de los productos cuyo precio cayo fuerte contra sus dias
-    previos. Sin ALERTAS_CHAT_ID solo las anota en el log, sin marcarlas: asi salen
-    el dia que se configure el destino."""
+    previos. Sin ALERTAS_CHAT_ID solo las cuenta en el log."""
     caidas = detectar_caidas(nodos, store.precios_de_referencia())
     chat = os.getenv("ALERTAS_CHAT_ID")
     if not token or not chat:
         logger.info("Caidas de precio: %d. Sin TELEGRAM_BOT_TOKEN o ALERTAS_CHAT_ID no se envian.",
                     len(caidas))
         return
-    enviadas = 0
-    for c in caidas:
-        if not store.marcar_alertado(c.item_id):
-            continue
-        try:
-            enviar_telegram(token, chat, texto_alerta(c))
-            enviadas += 1
-        except Exception as exc:  # noqa: BLE001
-            logger.error("No pude enviar la alerta de %s: %s", c.item_id, exc)
+    enviadas = avisar_caidas(caidas, store, lambda texto: enviar_telegram(token, chat, texto))
     logger.info("Caidas de precio: %d, alertas enviadas: %d", len(caidas), enviadas)
 
 
@@ -105,19 +111,9 @@ def main() -> None:
     for i, cat_id in enumerate(objetivos, 1):
         nodos = _muestrear(cfg["shopee_app_id"], cfg["shopee_secret"], cat_id)
         nodos_por_categoria[cat_id] = nodos
-        for n in nodos:
-            try:
-                store.registrar(
-                    int(n["itemId"]),
-                    int(n.get("sales") or 0),
-                    titulo=n.get("productName") or "",
-                    precio=float(n.get("price") or 0),
-                    comision_pct=float(n.get("commissionRate") or 0) * 100,
-                    link=n.get("offerLink") or "",
-                )
-                guardados += 1
-            except (KeyError, TypeError, ValueError):
-                continue
+        muestras = [m for n in nodos if (m := _a_muestra(n))]
+        store.registrar_muestras(muestras)
+        guardados += len(muestras)
         logger.info("[%d/%d] %s: %d productos", i, len(objetivos),
                     NOMBRES.get(cat_id, cat_id), len(nodos))
         time.sleep(_PAUSA)
