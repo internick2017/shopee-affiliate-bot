@@ -79,6 +79,7 @@ class TrendStore:
             "CREATE TABLE IF NOT EXISTS alertas_precio ("
             "item_id INTEGER NOT NULL, dia INTEGER NOT NULL, PRIMARY KEY (item_id, dia))"
         )
+        self._conn.execute("CREATE TABLE IF NOT EXISTS ideas_publicadas (dia INTEGER PRIMARY KEY)")
         self._conn.commit()
 
     def registrar_muestras(self, muestras: Iterable[Muestra], *, now: float | None = None) -> None:
@@ -159,6 +160,21 @@ class TrendStore:
         )
         self._conn.commit()
         return cur.rowcount > 0
+
+    def ideas_publicadas_hoy(self, *, now: float | None = None) -> bool:
+        """Si hoy ya se subieron las ideas al panel. El muestreo corre cada hora y
+        las ideas, con sus paginas extra de la API, van una sola vez por dia."""
+        now = time.time() if now is None else now
+        return self._conn.execute(
+            "SELECT 1 FROM ideas_publicadas WHERE dia = ?", (int(now // _DIA),)
+        ).fetchone() is not None
+
+    def marcar_ideas_publicadas(self, *, now: float | None = None) -> None:
+        now = time.time() if now is None else now
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO ideas_publicadas (dia) VALUES (?)", (int(now // _DIA),)
+            )
 
     def dias_con_datos(self) -> int:
         """Cuántos días distintos hay muestreados. Con menos de 2 no hay derivada

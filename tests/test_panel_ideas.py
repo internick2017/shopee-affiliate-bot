@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 
-from src.panel_ideas import filas_de_ideas, subir_ideas
+from src.panel_ideas import filas_de_ideas, filas_em_alta, subir_ideas
 from src.panel_sync import Supabase
+from src.trend_store import Tendencia
 
 _T = datetime(2026, 10, 3, 12, tzinfo=UTC)
 _CASA = 100636
@@ -29,6 +30,8 @@ def test_una_fila_por_producto_con_su_categoria():
     assert fila["descuento_pct"] == 20
     assert fila["vista_en"] == "2026-10-03T12:00:00+00:00"
     assert 0 < fila["puntaje"] <= 1
+    assert fila["tipo"] == "mais_vendidos"
+    assert fila["ventas_recentes"] is None
 
 
 def test_el_link_es_el_del_producto_no_el_de_afiliado():
@@ -61,6 +64,80 @@ def test_ventas_por_dia_sale_de_la_tendencia():
     assert por_id == {1: 12.5, 2: None}
 
 
+def _reciente(item_id, nuevas, ventas_ahora=1000, dias=10.0):
+    return Tendencia(item_id=item_id, titulo="", ventas_antes=ventas_ahora - nuevas,
+                     ventas_ahora=ventas_ahora, dias=dias, precio=0, comision_pct=0, link="")
+
+
+def _categoria_con(*candidatos):
+    """Los candidatos mas tres productos muy vendidos, que dejan la mediana en 50.000."""
+    grandes = [_nodo(900 + i, productName=f"Campeao {i}", sales=50000 + i) for i in range(3)]
+    return {_CASA: [*candidatos, *grandes]}
+
+
+def test_em_alta_entra_el_poco_vendido_que_vende_ahora():
+    [fila] = filas_em_alta(_categoria_con(_nodo(1, sales=1000)),
+                           {1: _reciente(1, nuevas=400)}, vista_en=_T)
+    assert fila["item_id"] == 1
+    assert fila["tipo"] == "em_alta"
+    assert fila["ventas_recentes"] == 400
+    assert fila["ventas_por_dia"] == 40.0
+    assert fila["puntaje"] == 0.4          # 400 de sus 1.000 ventas son recientes
+    assert fila["link"] == "https://shopee.com.br/product/9/1"
+
+
+def test_em_alta_deja_afuera_al_que_vendio_mas_que_la_mitad_de_su_categoria():
+    nodos = _categoria_con(_nodo(1, sales=1000))
+    recientes = {902: _reciente(902, nuevas=5000, ventas_ahora=50002)}
+    assert filas_em_alta(nodos, recientes, vista_en=_T) == []
+
+
+def test_em_alta_exige_treinta_ventas_recientes():
+    nodos = _categoria_con(_nodo(1, sales=1000), _nodo(2, productName="Balde", sales=1000))
+    recientes = {1: _reciente(1, nuevas=29), 2: _reciente(2, nuevas=30)}
+    assert [f["item_id"] for f in filas_em_alta(nodos, recientes, vista_en=_T)] == [2]
+
+
+def test_em_alta_sin_historial_no_entra():
+    assert filas_em_alta(_categoria_con(_nodo(1, sales=1000)), {}, vista_en=_T) == []
+
+
+def test_em_alta_exige_buena_calificacion():
+    nodos = _categoria_con(_nodo(1, sales=1000, ratingStar="4.6"),
+                           _nodo(2, productName="Balde", sales=1000, ratingStar="4.7"))
+    recientes = {1: _reciente(1, nuevas=400), 2: _reciente(2, nuevas=400)}
+    assert [f["item_id"] for f in filas_em_alta(nodos, recientes, vista_en=_T)] == [2]
+
+
+def test_em_alta_exige_un_real_por_venta():
+    nodos = _categoria_con(_nodo(1, sales=1000, price="9", commissionRate="0.10"),
+                           _nodo(2, productName="Balde", sales=1000, price="10",
+                                 commissionRate="0.10"))
+    recientes = {1: _reciente(1, nuevas=400), 2: _reciente(2, nuevas=400)}
+    assert [f["item_id"] for f in filas_em_alta(nodos, recientes, vista_en=_T)] == [2]
+
+
+def test_em_alta_ordena_por_la_parte_de_sus_ventas_que_es_reciente():
+    nodos = _categoria_con(_nodo(1, productName="Mop", sales=3000),
+                           _nodo(2, productName="Balde", sales=40))
+    recientes = {1: _reciente(1, nuevas=1500, ventas_ahora=3000),
+                 2: _reciente(2, nuevas=38, ventas_ahora=40)}
+    assert [f["item_id"] for f in filas_em_alta(nodos, recientes, vista_en=_T)] == [2, 1]
+
+
+def test_em_alta_no_rellena_cuando_pocos_cumplen():
+    nodos = _categoria_con(_nodo(1, productName="Mop", sales=1000),
+                           _nodo(2, productName="Balde", sales=1000))
+    assert len(filas_em_alta(nodos, {1: _reciente(1, nuevas=400)}, vista_en=_T)) == 1
+
+
+def test_em_alta_respeta_el_tope_por_categoria():
+    candidatos = [_nodo(i, productName=f"Coisa{i} nova", sales=1000) for i in range(1, 4)]
+    recientes = {i: _reciente(i, nuevas=100 * i) for i in range(1, 4)}
+    filas = filas_em_alta(_categoria_con(*candidatos), recientes, vista_en=_T, por_categoria=2)
+    assert [f["item_id"] for f in filas] == [3, 2]
+
+
 class _Db:
     def __init__(self):
         self.orden = []
@@ -76,7 +153,7 @@ def test_subir_ideas_sube_y_despues_borra_las_viejas():
     db = _Db()
     filas = filas_de_ideas({_CASA: [_nodo(1)]}, {}, vista_en=_T)
     assert subir_ideas(db, filas, vista_en=_T) == 1
-    assert db.orden == [("upsert", "ideia", 1, "item_id"),
+    assert db.orden == [("upsert", "ideia", 1, "item_id,tipo"),
                         ("borrar_anteriores", "ideia", "vista_en", "2026-10-03T12:00:00+00:00")]
 
 

@@ -3,7 +3,10 @@
 Corre cada hora (tarea programada "Muestreo Shopee", que lanza muestreo-diario.vbs).
 Recorre las categorías mapeadas, pide los productos más vendidos de cada una y
 guarda su `sales` y su precio de hoy: las corridas del mismo día pisan la muestra
-anterior. De paso avisa por Telegram las caídas de precio y sube las ideas al panel.
+anterior. De paso avisa por Telegram las caídas de precio.
+
+La primera corrida del día además baja páginas más profundas de cada categoría,
+donde está lo poco vendido, y sube las ideas al panel.
 
 La derivada entre días es lo que dice qué está DESPEGANDO, que es distinto de lo
 que ya vendió mucho — ver el docstring de `src/trend_store.py`.
@@ -20,7 +23,7 @@ import time
 from datetime import UTC, datetime
 
 from src.config import load_config
-from src.panel_ideas import filas_de_ideas, subir_ideas
+from src.panel_ideas import filas_de_ideas, filas_em_alta, subir_ideas
 from src.panel_sync import Supabase
 from src.price_alerts import avisar_caidas, detectar_caidas, enviar_telegram
 from src.product_ideas import CATEGORIAS, _CAMPOS, NOMBRES, resolver_categoria
@@ -32,11 +35,16 @@ logger = logging.getLogger("snapshot")
 
 _POR_CATEGORIA = 50      # techo de la API
 _PAUSA = 1.5             # segundos entre llamadas: la API tiene rate limit (10030)
+# La pagina 1 son los mas vendidos. Las otras dos se piden solo para armar las
+# ideas: ahi abajo esta lo poco vendido, de donde sale la lista "em alta".
+_PAGINAS_PARA_IDEAS = (1, 5, 10)
+_VENTANA_RECIENTE = 30   # dias que cuentan como "ventas recientes"
 
 
-def _muestrear(app_id: str, secret: str, cat_id: int) -> list[dict]:
-    query = "{productOfferV2(productCatId:%d,sortType:2,limit:%d){nodes{%s productLink}}}" % (
-        cat_id, _POR_CATEGORIA, _CAMPOS,
+def _muestrear(app_id: str, secret: str, cat_id: int, pagina: int) -> list[dict]:
+    query = (
+        "{productOfferV2(productCatId:%d,sortType:2,page:%d,limit:%d){nodes{%s productLink}}}"
+        % (cat_id, pagina, _POR_CATEGORIA, _CAMPOS)
     )
     data = _graphql_call(app_id, secret, query)
     if not data:
@@ -59,22 +67,35 @@ def _a_muestra(nodo: dict) -> Muestra | None:
         return None
 
 
-def _publicar_ideas(nodos_por_categoria: dict[int, list[dict]], store: TrendStore) -> None:
-    """Sube las ideas del dia al panel. Nunca frena el muestreo: sin las llaves del
-    panel, o si Supabase falla, se avisa y el muestreo queda guardado igual."""
+def _panel() -> Supabase | None:
     url, llave = os.getenv("SUPABASE_PANEL_URL"), os.getenv("SUPABASE_PANEL_SERVICE_KEY")
-    if not url or not llave:
-        logger.info("Sin llaves del panel en el .env: no se suben ideas.")
-        return
+    return Supabase(url, llave) if url and llave else None
+
+
+def _publicar_ideas(
+    panel: Supabase,
+    mas_vendidos: dict[int, list[dict]],
+    todos: dict[int, list[dict]],
+    store: TrendStore,
+) -> None:
+    """Sube las dos listas de ideas al panel y anota que hoy ya salieron. Nunca
+    frena el muestreo: si Supabase falla se avisa, el muestreo queda guardado y la
+    corrida siguiente lo vuelve a intentar."""
     ahora = datetime.now(UTC)
     por_dia = {t.item_id: t.por_dia for t in store.tendencias(minimo_nuevas=1)}
-    filas = filas_de_ideas(nodos_por_categoria, por_dia, vista_en=ahora)
+    recientes = {
+        t.item_id: t
+        for t in store.tendencias(ventana_dias=_VENTANA_RECIENTE, minimo_nuevas=1)
+    }
+    vendidos = filas_de_ideas(mas_vendidos, por_dia, vista_en=ahora)
+    em_alta = filas_em_alta(todos, recientes, vista_en=ahora)
     try:
-        subidas = subir_ideas(Supabase(url, llave), filas, vista_en=ahora)
+        subir_ideas(panel, vendidos + em_alta, vista_en=ahora)
     except Exception as exc:  # noqa: BLE001
         logger.error("No pude subir las ideas al panel: %s", exc)
         return
-    logger.info("Ideas en el panel: %d", subidas)
+    store.marcar_ideas_publicadas()
+    logger.info("Ideas en el panel: %d mais vendidos, %d em alta", len(vendidos), len(em_alta))
 
 
 def _alertar_caidas(nodos: list[dict], store: TrendStore, token: str | None) -> None:
@@ -108,25 +129,33 @@ def main() -> None:
     else:
         objetivos = sorted(set(CATEGORIAS.values()))
 
+    # Con una sola categoria pedida, subir borraria del panel las ideas de las demas.
+    panel = _panel() if len(sys.argv) == 1 else None
+    con_ideas = panel is not None and not store.ideas_publicadas_hoy()
+    paginas = _PAGINAS_PARA_IDEAS if con_ideas else (1,)
+
     guardados = 0
-    nodos_por_categoria: dict[int, list[dict]] = {}
+    mas_vendidos: dict[int, list[dict]] = {}
+    todos: dict[int, list[dict]] = {}
     for i, cat_id in enumerate(objetivos, 1):
-        nodos = _muestrear(cfg["shopee_app_id"], cfg["shopee_secret"], cat_id)
-        nodos_por_categoria[cat_id] = nodos
-        muestras = [m for n in nodos if (m := _a_muestra(n))]
+        por_pagina = []
+        for pagina in paginas:
+            por_pagina.append(_muestrear(cfg["shopee_app_id"], cfg["shopee_secret"], cat_id, pagina))
+            time.sleep(_PAUSA)
+        mas_vendidos[cat_id] = por_pagina[0]
+        todos[cat_id] = [n for nodos in por_pagina for n in nodos]
+        muestras = [m for n in todos[cat_id] if (m := _a_muestra(n))]
         store.registrar_muestras(muestras)
         guardados += len(muestras)
         logger.info("[%d/%d] %s: %d productos", i, len(objetivos),
-                    NOMBRES.get(cat_id, cat_id), len(nodos))
-        time.sleep(_PAUSA)
+                    NOMBRES.get(cat_id, cat_id), len(muestras))
 
     logger.info("Listo: %d muestras guardadas. Dias con datos: %d",
                 guardados, store.dias_con_datos())
-    _alertar_caidas([n for nodos in nodos_por_categoria.values() for n in nodos],
+    _alertar_caidas([n for nodos in todos.values() for n in nodos],
                     store, cfg.get("telegram_bot_token"))
-    # Con una sola categoria pedida, subir borraria del panel las ideas de las demas.
-    if len(sys.argv) == 1:
-        _publicar_ideas(nodos_por_categoria, store)
+    if con_ideas:
+        _publicar_ideas(panel, mas_vendidos, todos, store)
 
 
 if __name__ == "__main__":
