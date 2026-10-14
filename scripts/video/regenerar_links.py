@@ -37,11 +37,7 @@ from src.shopee_resolver import _USER_AGENT, retag_shopee_url  # noqa: E402
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 DB = BOT / "grabados.db"
 
-# Por canal, de donde salen las credenciales de SU cuenta de afiliado.
-CUENTAS = {
-    "lanny": ("SHOPEE_APP_ID", "SHOPEE_SECRET"),
-    "nick": ("SHOPEE_APP_ID_NICK", "SHOPEE_SECRET_NICK"),
-}
+from src.video_canal import CUENTAS  # noqa: E402  (la misma tabla que usa registrar_video)
 
 
 def url_real(shortlink: str) -> str | None:
