@@ -26,7 +26,7 @@ from src.config import load_config
 from src.panel_ideas import filas_de_ideas, filas_em_alta, subir_ideas
 from src.panel_sync import Supabase
 from src.price_alerts import avisar_caidas, detectar_caidas, enviar_telegram
-from src.product_ideas import CATEGORIAS, _CAMPOS, NOMBRES, resolver_categoria
+from src.product_ideas import _CAMPOS, CATEGORIAS, NOMBRES, resolver_categoria
 from src.shopee_resolver import _graphql_call
 from src.trend_store import Muestra, TrendStore
 
@@ -43,8 +43,8 @@ _VENTANA_RECIENTE = 30   # dias que cuentan como "ventas recientes"
 
 def _muestrear(app_id: str, secret: str, cat_id: int, pagina: int) -> list[dict]:
     query = (
-        "{productOfferV2(productCatId:%d,sortType:2,page:%d,limit:%d){nodes{%s productLink}}}"
-        % (cat_id, pagina, _POR_CATEGORIA, _CAMPOS)
+        f"{{productOfferV2(productCatId:{cat_id},sortType:2,page:{pagina},"
+        f"limit:{_POR_CATEGORIA}){{nodes{{{_CAMPOS} productLink}}}}}}"
     )
     data = _graphql_call(app_id, secret, query)
     if not data:

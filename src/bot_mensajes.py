@@ -15,8 +15,9 @@ Las etiquetas <b>/<i> de las plantillas de acá NO se escapan, son nuestras.
 from __future__ import annotations
 
 import html
+from collections.abc import Iterable
 from decimal import Decimal
-from typing import Any, Iterable
+from typing import Any
 
 from .post_builder import format_brl, rango_relevante
 

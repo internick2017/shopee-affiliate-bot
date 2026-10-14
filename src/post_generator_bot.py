@@ -7,9 +7,9 @@ alrededor de `generate_post_reply`.
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from .bot_mensajes import aviso_rango
 from .post_builder import HookBank
 from .shopee_resolver import extract_shopee_shortlinks, resolve_shopee_offer
-from .bot_mensajes import aviso_rango
 from .shopee_review import _build_post_propio
 from .vertical_canvas import build_vertical_canvas
 

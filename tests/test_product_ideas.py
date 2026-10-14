@@ -3,12 +3,12 @@ from decimal import Decimal
 
 from src.product_ideas import (
     _PESO_VENTAS,
-    _firma,
-    retorno_por_venta,
     CATEGORIAS,
+    _firma,
     buscar_ideas,
     puntuar,
     resolver_categoria,
+    retorno_por_venta,
 )
 
 
@@ -128,7 +128,8 @@ def test_respeta_el_limite():
 
 
 def test_descarta_nodos_incompletos():
-    malo = _nodo("sin link"); malo["offerLink"] = None
+    malo = _nodo("sin link")
+    malo["offerLink"] = None
     r = buscar_ideas("limpeza", "a", "s", http_post=_post([malo, _nodo("ok")]))
     assert [i.titulo for i in r] == ["ok"]
 

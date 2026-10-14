@@ -15,6 +15,7 @@ Leer siempre la transcripcion completa.
 """
 
 import argparse
+import contextlib
 import sys
 import unicodedata
 
@@ -50,10 +51,8 @@ def main() -> int:
     args = ap.parse_args()
 
     # La consola de Windows viene en cp1252 y se come los acentos del portugues.
-    try:
+    with contextlib.suppress(AttributeError):
         sys.stdout.reconfigure(encoding="utf-8")
-    except AttributeError:
-        pass
 
     from faster_whisper import WhisperModel
 
