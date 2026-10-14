@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -250,7 +250,7 @@ def sincronizar(
     http_post: Callable[..., object] | None = None,
     pausa: float = _PAUSA,
     error_marcas: str | None = None,
-    marcas_consumidas: list[tuple[str, int]] = (),
+    marcas_consumidas: Iterable[tuple[str, int]] = (),
 ) -> dict[str, bool]:
     """Una corrida completa. `cuentas` = {cuenta: (app_id, secret)}. Se releen los
     90 dias enteros cada vez porque una venta puede seguir pendiente semanas: leer

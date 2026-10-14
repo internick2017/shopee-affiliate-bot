@@ -55,7 +55,7 @@ def _fondo(im, ancho: int, alto: int):
 
     w, h = im.size
     escala = ancho / w
-    base = im.resize((ancho, max(1, round(h * escala))), Image.LANCZOS)
+    base = im.resize((ancho, max(1, round(h * escala))), Image.Resampling.LANCZOS)
     bw, bh = base.size
     lienzo = Image.new("RGB", (ancho, alto))
     # Mosaico espejado vertical: la fila i alterna original / volteada.
@@ -97,6 +97,7 @@ def _mascara_fundido(ancho: int, alto: int):
 
     mascara = Image.new("L", (ancho, alto), 255)
     px = mascara.load()
+    assert px is not None  # PIL solo devuelve None si la imagen no esta cargada
     fundido = min(_FUNDIDO, alto // 3)
     for i in range(fundido):
         valor = round(255 * (i / fundido))
@@ -118,7 +119,7 @@ def build_vertical_canvas(image_bytes: bytes, *, ancho: int = _ANCHO, alto: int 
         im = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         lienzo = _fondo(im, ancho, alto)
         nw, nh, x, y = _medidas_producto(*im.size, ancho, alto)
-        producto = im.resize((nw, nh), Image.LANCZOS)
+        producto = im.resize((nw, nh), Image.Resampling.LANCZOS)
         lienzo.paste(producto, (x, y), _mascara_fundido(nw, nh))
         out = io.BytesIO()
         lienzo.save(out, format="JPEG", quality=92)
