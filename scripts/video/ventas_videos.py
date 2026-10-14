@@ -73,9 +73,9 @@ def ventas_por_item(app: str, sec: str, dias: int) -> dict[int, dict]:
     fin = int(time.time())
     ini = fin - dias * 86400
     query = (
-        "{conversionReport(purchaseTimeStart:%d,purchaseTimeEnd:%d,limit:500)"
+        f"{{conversionReport(purchaseTimeStart:{ini},purchaseTimeEnd:{fin},limit:500)"
         "{nodes{referrer orders{items{itemId itemName qty itemPrice "
-        "itemTotalCommission displayItemStatus completeTime}}}}}" % (ini, fin)
+        "itemTotalCommission displayItemStatus completeTime}}}}}"
     )
     data = _graphql_call(app, sec, query)
     nodos = ((data or {}).get("conversionReport") or {}).get("nodes") or []

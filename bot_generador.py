@@ -34,6 +34,7 @@ from src.bot_comandos import (
 )
 from src.bot_mensajes import texto_grabados, texto_idea, texto_tendencia, texto_ventas
 from src.config import load_config
+from src.grabados_store import GrabadosStore
 from src.instancia_unica import ya_hay_otra_instancia
 from src.logging_setup import configurar_logging
 from src.post_builder import HookBank
@@ -46,7 +47,6 @@ from src.post_generator_bot import (
 )
 from src.product_ideas import CATEGORIAS, buscar_ideas, nombre_categoria
 from src.sales_report import resumen_ventas
-from src.grabados_store import GrabadosStore
 from src.trend_store import TrendStore
 from src.user_credentials_store import UserCredentialsStore
 from src.video_vertical import MODO_MARCO, MODO_RECORTE, to_vertical
@@ -364,7 +364,6 @@ async def _handle_video_vertical(update: Update, context: ContextTypes.DEFAULT_T
 
     with tempfile.TemporaryDirectory() as tmp:
         entrada = Path(tmp) / "entrada.mp4"
-        salida = Path(tmp) / "vertical.mp4"
         archivo = await context.bot.get_file(media.file_id)
         await archivo.download_to_drive(custom_path=str(entrada))
 

@@ -3,9 +3,13 @@
 con "can't parse entities" y el comando falla sin que se vea por que."""
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from src.bot_mensajes import (
+    aviso_rango,
+    brl,
     esc,
+    pct,
     texto_grabados,
     texto_idea,
     texto_tendencia,
@@ -123,10 +127,6 @@ def test_ventas_omite_los_bloques_vacios():
     assert "Por banda de precio" not in t
 
 
-from decimal import Decimal
-
-from src.bot_mensajes import aviso_rango
-
 
 def test_aviso_rango_calla_cuando_no_hay_variacion_relevante():
     """Suena en 1 de cada 3 productos; si avisara por centavos seria ruido y se
@@ -150,8 +150,6 @@ def test_aviso_rango_dice_que_el_precio_publicado_es_el_mas_barato():
     assert "mas barata" in t.lower() or "barata" in t.lower()
 
 
-from src.bot_mensajes import brl
-
 
 def test_brl_usa_el_formato_brasileno():
     """Coma decimal y punto de miles. Reusa format_brl, el mismo que arma el post."""
@@ -174,8 +172,6 @@ def test_los_mensajes_no_muestran_punto_decimal():
     a = aviso_rango(Decimal("16.9"), Decimal("49.9"))
     assert "R$ 16,90" in a and "R$ 49,90" in a
 
-
-from src.bot_mensajes import pct
 
 
 def test_pct_usa_coma_decimal():

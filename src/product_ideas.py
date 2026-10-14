@@ -203,7 +203,7 @@ def puntuar(*, comision_pct: float, ventas: int, rating: float, precio: float) -
 # otro: si entraran en la firma, dos productos distintos pareceran el mismo.
 _RUIDO = {
     "kit", "de", "da", "do", "para", "com", "sem", "e", "em", "a", "o", "os", "as",
-    "un", "uma", "por", "pcs", "pecas", "unidades", "und", "un", "novo", "nova",
+    "un", "uma", "por", "pcs", "pecas", "unidades", "und", "novo", "nova",
     "original", "premium", "profissional", "top", "promocao", "frete", "gratis",
 }
 
@@ -230,7 +230,7 @@ def _firma(titulo: str) -> str:
     return " ".join(palabras) or _normalizar(titulo)[:12]
 
 
-def _variar(ideas: list["Idea"], cuantas: int) -> list["Idea"]:
+def _variar(ideas: list[Idea], cuantas: int) -> list[Idea]:
     """Toma las mejores `cuantas` evitando repetir el mismo producto.
 
     Recorre en orden de puntaje y saltea las firmas ya vistas. Si con eso no
@@ -320,9 +320,8 @@ def buscar_ideas(
             return []
         filtro = f'keyword:"{limpio}"'
 
-    query = "{productOfferV2(%s,sortType:2,limit:%d){nodes{%s}}}" % (
-        filtro, max(1, min(candidatos, 50)), _CAMPOS,
-    )
+    limite = max(1, min(candidatos, 50))
+    query = f"{{productOfferV2({filtro},sortType:2,limit:{limite}){{nodes{{{_CAMPOS}}}}}}}"
     kwargs = {"http_post": http_post} if http_post is not None else {}
     data = _graphql_call(app_id, secret, query, **kwargs)
     if not data:

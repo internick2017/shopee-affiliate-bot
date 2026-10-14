@@ -2,7 +2,13 @@
 nativo de Telegram (el que aparece al escribir "/"), el texto de /ayuda y el aviso
 de comando desconocido. Si se separaran, se desincronizan y el menu miente."""
 
-from src.bot_comandos import COMANDOS, comandos_para_telegram, texto_ayuda, texto_desconocido
+from src.bot_comandos import (
+    COMANDOS,
+    comandos_para_telegram,
+    parece_comando,
+    texto_ayuda,
+    texto_desconocido,
+)
 
 
 def test_cada_comando_tiene_nombre_y_descripcion_utiles():
@@ -19,7 +25,7 @@ def test_cada_comando_tiene_nombre_y_descripcion_utiles():
 def test_el_menu_de_telegram_sale_del_mismo_catalogo():
     pares = comandos_para_telegram()
     assert pares == [(c.nombre, c.descripcion) for c in COMANDOS]
-    assert ("ventas", ) == (pares[[p[0] for p in pares].index("ventas")][0], )
+    assert (pares[[p[0] for p in pares].index("ventas")][0], ) == ("ventas", )
 
 
 def test_ayuda_lista_todos_los_comandos():
@@ -46,8 +52,6 @@ def test_desconocido_recorta_un_texto_absurdo():
     t = texto_desconocido("/" + "z" * 500)
     assert len(t) < 400
 
-
-from src.bot_comandos import parece_comando
 
 
 def test_parece_comando_agarra_el_caso_del_espacio():
