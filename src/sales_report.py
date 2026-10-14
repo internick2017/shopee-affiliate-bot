@@ -26,6 +26,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from .shopee_resolver import _graphql_call
 
@@ -113,7 +114,7 @@ def resumen_ventas(
     fin = int(ahora if ahora is not None else time.time())
     ini = fin - dias * 86400
     query = "{%s}" % (_CAMPOS % (ini, fin, max(1, min(limite, 500))))
-    kwargs = {"http_post": http_post} if http_post is not None else {}
+    kwargs: dict[str, Any] = {"http_post": http_post} if http_post is not None else {}
     data = _graphql_call(app_id, secret, query, **kwargs)
     if not data:
         return Ventas(dias=dias, error="No pude leer el reporte de ventas de Shopee.")

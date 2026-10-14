@@ -23,6 +23,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from .shopee_resolver import _graphql_call
 
@@ -269,8 +270,11 @@ def _a_idea(nodo: dict) -> Idea | None:
         return None
     if not nodo.get("productName") or not nodo.get("offerLink"):
         return None
+    crudo = nodo.get("itemId")
+    if crudo is None:
+        return None
     try:
-        item_id = int(nodo.get("itemId"))
+        item_id = int(crudo)
     except (TypeError, ValueError):
         return None
     return Idea(
@@ -322,7 +326,7 @@ def buscar_ideas(
 
     limite = max(1, min(candidatos, 50))
     query = f"{{productOfferV2({filtro},sortType:2,limit:{limite}){{nodes{{{_CAMPOS}}}}}}}"
-    kwargs = {"http_post": http_post} if http_post is not None else {}
+    kwargs: dict[str, Any] = {"http_post": http_post} if http_post is not None else {}
     data = _graphql_call(app_id, secret, query, **kwargs)
     if not data:
         return []
