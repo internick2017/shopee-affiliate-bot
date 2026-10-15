@@ -40,6 +40,8 @@ log = logging.getLogger(__name__)
 PAQUETE = "com.shopee.br"
 CARPETA_CELULAR = "/sdcard/DCIM/ShopeeBot"
 CARPETA_VIDEOS = Path(__file__).resolve().parent.parent / "videos_entregados" / "shopee-video-flow"
+# Decision de Nick (2026-10-15): 4 o 5 por dia. Mas que eso empieza a parecer robot.
+TOPE_DIARIO = 5
 
 
 class PublicacionAbortada(RuntimeError):
@@ -83,6 +85,15 @@ def bloqueado(dumpsys_window: str) -> bool:
     """Si la pantalla de bloqueo esta arriba, segun `dumpsys window`. Con el PIN
     puesto no hay nada que hacer: el script no conoce ni debe conocer el PIN."""
     return "isKeyguardShowing=true" in dumpsys_window
+
+
+def publicados_hoy(store: VideosStore, canal: str, *, ahora: float | None = None) -> int:
+    """Cuantos videos del canal salieron desde la medianoche local, a mano o por la
+    tarea. Es lo que hace cumplir el tope diario aunque se mezclen las dos vias."""
+    ahora = time.time() if ahora is None else ahora
+    medianoche = time.mktime(time.localtime(ahora)[:3] + (0, 0, 0, 0, 0, -1))
+    return sum(1 for v in store.listar(canal, 100_000)
+               if v.publicado_ts is not None and v.publicado_ts >= medianoche)
 
 
 def ruta_video(archivo: str, carpeta: Path = CARPETA_VIDEOS) -> Path:

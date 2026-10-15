@@ -33,9 +33,11 @@ from src.grabados_store import VideosStore  # noqa: E402
 from src.logging_setup import configurar_logging  # noqa: E402
 from src.panel_sync import Supabase, subir_video  # noqa: E402
 from src.publicador_celular import (  # noqa: E402
+    TOPE_DIARIO,
     Celular,
     Pasos,
     PublicacionAbortada,
+    publicados_hoy,
     publicar,
     siguiente_video,
 )
@@ -53,6 +55,10 @@ def main() -> int:
     log = configurar_logging("publicador", RAIZ / "logs" / "publicador.log")
 
     store = VideosStore(RAIZ / "grabados.db")
+    hoy = publicados_hoy(store, args.canal)
+    if args.postar and hoy >= TOPE_DIARIO:
+        log.info("Ya salieron %d videos hoy (tope %d): no publico mas hasta manana.", hoy, TOPE_DIARIO)
+        return 0
     if args.item_id:
         video = next((v for v in store.sin_publicar(args.canal) if v.item_id == args.item_id), None)
     else:

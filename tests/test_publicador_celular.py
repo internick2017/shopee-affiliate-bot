@@ -7,6 +7,7 @@ from src.publicador_celular import (
     elegir_producto,
     es_verde,
     normalizar,
+    publicados_hoy,
     ruta_video,
     siguiente_video,
 )
@@ -79,3 +80,19 @@ def test_bloqueado_lee_el_dumpsys_del_a07():
     # Lineas reales de `dumpsys window` del Galaxy A07 (2026-10-15).
     assert not bloqueado("mShowingDream=false mDreamingLockscreen=false\nisKeyguardShowing=false")
     assert bloqueado("isKeyguardShowing=true")
+
+
+def test_publicados_hoy_cuenta_desde_la_medianoche_local(tmp_path):
+    import time
+
+    store = VideosStore(tmp_path / "g.db")
+    ahora = time.mktime((2026, 10, 15, 14, 0, 0, 0, 0, -1))
+    for i, hora in enumerate((1, 9, 13)):  # tres de hoy
+        store.registrar(i, canal="nick", titulo="x")
+        store.marcar_publicado(i, "nick", cuando=time.mktime((2026, 10, 15, hora, 0, 0, 0, 0, -1)))
+    store.registrar(9, canal="nick", titulo="ayer")
+    store.marcar_publicado(9, "nick", cuando=time.mktime((2026, 10, 14, 23, 0, 0, 0, 0, -1)))
+    store.registrar(10, canal="nick", titulo="sin publicar")
+    store.registrar(11, canal="lanny", titulo="otro canal")
+    store.marcar_publicado(11, "lanny", cuando=ahora)
+    assert publicados_hoy(store, "nick", ahora=ahora) == 3
