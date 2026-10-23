@@ -258,8 +258,15 @@ class Celular:
             self.pasos.foto(self.d, "rotulo_ia_apagado")
             raise PublicacionAbortada("El rotulo de IA no quedo prendido")
 
-    def postar(self) -> None:
+    def postar(self, aceptar_aviso: bool = False) -> None:
         self._tocar("Postar")
+        # Shopee a veces avisa "Gostaria de reconsiderar postar isso?" (posible violacion
+        # de pautas). Solo se acepta si Nick lo pidio para este video; si no, aborta.
+        if self.d(textContains="reconsiderar postar").wait(timeout=5):
+            self.pasos.foto(self.d, "aviso_pautas")
+            if not aceptar_aviso:
+                raise PublicacionAbortada("Shopee avisa de posible violacion de pautas")
+            self.d(textStartsWith="Postar de").click()
         # Al publicar, la app sale de "Adicionar legenda". Si sigue ahi, no salio.
         time.sleep(15)
         self.pasos.foto(self.d, "despues_de_postar")
@@ -277,6 +284,7 @@ def publicar(
     celular: Celular,
     *,
     postar: bool,
+    aceptar_aviso: bool = False,
     carpeta: Path = CARPETA_VIDEOS,
 ) -> bool:
     """Sube un video. Con `postar=False` deja todo cargado, saca la captura y
@@ -296,7 +304,7 @@ def publicar(
         log.info("En seco: todo cargado para %s, no se publica", video.item_id)
         celular.descartar()
         return False
-    celular.postar()
+    celular.postar(aceptar_aviso)
     store.marcar_publicado(video.item_id, video.canal)
     log.info("Publicado %s (%s)", video.item_id, video.titulo)
     return True

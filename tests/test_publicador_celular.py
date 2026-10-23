@@ -1,8 +1,13 @@
 """La parte del publicador que decide, sin celular: que video sigue y si el
 producto que muestra la app es el registrado."""
 
+import pytest
+
+from src import publicador_celular
 from src.grabados_store import VideosStore
 from src.publicador_celular import (
+    Celular,
+    PublicacionAbortada,
     bloqueado,
     elegir_producto,
     es_verde,
@@ -96,3 +101,57 @@ def test_publicados_hoy_cuenta_desde_la_medianoche_local(tmp_path):
     store.registrar(11, canal="lanny", titulo="otro canal")
     store.marcar_publicado(11, "lanny", cuando=ahora)
     assert publicados_hoy(store, "nick", ahora=ahora) == 3
+
+
+class _Sel:
+    def __init__(self, presente, toques, nombre):
+        self.presente, self.toques, self.nombre = presente, toques, nombre
+        self.exists = presente
+
+    def wait(self, timeout=0):
+        return self.presente
+
+    def click(self):
+        self.toques.append(self.nombre)
+
+
+class _Pantalla:
+    """Un celular falso: solo existen los textos que se le dicen."""
+
+    def __init__(self, textos):
+        self.textos, self.toques = textos, []
+
+    def __call__(self, **criterio):
+        texto = next(iter(criterio.values()))
+        return _Sel(texto in self.textos, self.toques, texto)
+
+
+class _SinCapturas:
+    def foto(self, d, nombre):
+        pass
+
+
+def _celular(monkeypatch, textos):
+    monkeypatch.setattr(publicador_celular.time, "sleep", lambda s: None)
+    monkeypatch.setattr(publicador_celular, "_pausa", lambda *a, **k: None)
+    pantalla = _Pantalla({"Postar", *textos})
+    return Celular(pantalla, _SinCapturas()), pantalla
+
+
+def test_postar_aborta_si_shopee_avisa_y_no_se_pidio_aceptar(monkeypatch):
+    celular, pantalla = _celular(monkeypatch, {"reconsiderar postar", "Postar de"})
+    with pytest.raises(PublicacionAbortada):
+        celular.postar()
+    assert "Postar de" not in pantalla.toques
+
+
+def test_postar_acepta_el_aviso_solo_si_se_pidio(monkeypatch):
+    celular, pantalla = _celular(monkeypatch, {"reconsiderar postar", "Postar de"})
+    celular.postar(aceptar_aviso=True)
+    assert "Postar de" in pantalla.toques
+
+
+def test_postar_sin_aviso_no_toca_nada_de_mas(monkeypatch):
+    celular, pantalla = _celular(monkeypatch, set())
+    celular.postar(aceptar_aviso=True)
+    assert pantalla.toques == ["Postar"]
