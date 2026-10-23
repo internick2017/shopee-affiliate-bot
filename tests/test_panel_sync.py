@@ -11,6 +11,7 @@ from src.panel_sync import (
     filas_de_videos,
     leer_conversiones,
     sincronizar,
+    subir_video,
     traer_marcas,
 )
 
@@ -461,3 +462,12 @@ def test_si_falla_subir_los_videos_no_se_borran_las_marcas():
     sincronizar({}, [_video(canal="lanny")], db, ahora=_T, pausa=0,
                 marcas_consumidas=[("lanny", 7)])
     assert db.borrados == []
+
+
+def test_subir_video_manda_solo_ese_video_con_su_fecha_de_publicado():
+    """Lo usa el publicador del celular: el panel se entera en el momento."""
+    db = _FakeSupabase()
+    subir_video(db, _video(publicado_ts=1790971306.0))
+    [(tabla, filas, conflicto)] = db.upserts
+    assert (tabla, conflicto) == ("video", "canal,item_id")
+    assert len(filas) == 1 and filas[0]["publicado_en"].startswith("2026-")

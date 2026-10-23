@@ -241,6 +241,12 @@ def traer_marcas(db: Any, store: VideosStore) -> tuple[int, list[tuple[str, int]
     return marcadas, consumidas, None
 
 
+def subir_video(db: Any, video: VideoProducido) -> None:
+    """Sube un solo video al panel, apenas se publica desde el celular: sin esto la
+    marca de publicado tardaria hasta 4 horas (la proxima `sincronizar`)."""
+    db.upsert("video", filas_de_videos([video]), _CLAVE_VIDEO)
+
+
 def sincronizar(
     cuentas: dict[str, tuple[str, str]],
     videos: list[VideoProducido],

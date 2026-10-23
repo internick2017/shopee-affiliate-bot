@@ -7,3 +7,5 @@ python-telegram-bot>=21.0,<22
 Pillow>=10.0,<12
 # Trae el binario de ffmpeg: en Windows evita instalarlo aparte y ponerlo en el PATH.
 imageio-ffmpeg>=0.5,<1
+# Maneja la app de Shopee en el celular por ADB: Shopee Video no tiene API.
+uiautomator2>=3,<4
