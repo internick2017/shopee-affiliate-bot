@@ -50,6 +50,10 @@ def main() -> int:
     ap.add_argument("--postar", action="store_true", help="publicar de verdad (sin esto, en seco)")
     ap.add_argument("--aceptar-aviso", action="store_true",
                     help='pulsar "Postar de qualquer forma" si Shopee avisa de posible violacion de pautas')
+    ap.add_argument("--saltar-verificacion", action="store_true",
+                    help="no comparar el producto vinculado con el registrado (solo si lo confirmaste a mano)")
+    ap.add_argument("--pagina-directa", action="store_true",
+                    help="el link abre directo en la pagina completa, sin vista corta que tocar")
     args = ap.parse_args()
 
     # Ruta explicita: load_dotenv() pelado busca desde el directorio actual.
@@ -77,7 +81,10 @@ def main() -> int:
         log.exception("No pude conectar con el celular (cable, depuracion USB?)")
         return 1
     try:
-        publico = publicar(store, video, celular, postar=args.postar, aceptar_aviso=args.aceptar_aviso)
+        publico = publicar(
+            store, video, celular, postar=args.postar, aceptar_aviso=args.aceptar_aviso,
+            verificar=not args.saltar_verificacion, pagina_directa=args.pagina_directa,
+        )
     except PublicacionAbortada as e:
         log.error("ABORTADO: %s. Capturas en %s", e, pasos.carpeta)
         celular.descartar()

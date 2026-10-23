@@ -185,14 +185,18 @@ class Celular:
         self.d.shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{destino}")
         time.sleep(3)
 
-    def abrir_producto(self, link: str, titulo: str) -> None:
+    def abrir_producto(self, link: str, titulo: str, *, pagina_directa: bool = False) -> None:
         self.d.screen_on()
         self.d.app_stop(PAQUETE)
         self.d.shell(f'am start -a android.intent.action.VIEW -d "{link}" {PAQUETE}')
         # El link abre una vista corta; tocando el titulo se pasa a la pagina
-        # completa, que es la que tiene el icono de compartir.
-        primeras = " ".join(titulo.split()[:4])
-        self._tocar(primeras, espera=30, contiene=True)
+        # completa, que es la que tiene el icono de compartir. Algunos links abren
+        # directo en la pagina completa: ahi no hay titulo corto que tocar.
+        if pagina_directa:
+            time.sleep(5)
+        else:
+            primeras = " ".join(titulo.split()[:4])
+            self._tocar(primeras, espera=30, contiene=True)
         if not self.d(textContains="Quantidade").wait(timeout=20):
             log.info("No vi 'Quantidade': sigo, la pagina puede variar por producto")
         self.pasos.foto(self.d, "pagina_producto")
@@ -285,6 +289,8 @@ def publicar(
     *,
     postar: bool,
     aceptar_aviso: bool = False,
+    verificar: bool = True,
+    pagina_directa: bool = False,
     carpeta: Path = CARPETA_VIDEOS,
 ) -> bool:
     """Sube un video. Con `postar=False` deja todo cargado, saca la captura y
@@ -293,10 +299,11 @@ def publicar(
     assert video.legenda is not None  # siguiente_video ya lo garantiza
     celular.verificar_desbloqueado()
     celular.copiar_video(ruta_video(video.archivo, carpeta))
-    celular.abrir_producto(video.link, video.titulo)
+    celular.abrir_producto(video.link, video.titulo, pagina_directa=pagina_directa)
     celular.ir_a_shopee_video()
     celular.elegir_primer_video()
-    celular.verificar_producto(video.titulo)
+    if verificar:  # solo se salta si Nick confirmo a mano que el producto es el correcto
+        celular.verificar_producto(video.titulo)
     celular.escribir_legenda(video.legenda)
     celular.marcar_rotulo_ia()
     celular.pasos.foto(celular.d, "listo_para_postar")
