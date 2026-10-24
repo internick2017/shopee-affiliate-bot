@@ -128,6 +128,8 @@ class VideoProducido:
     ts: float
     publicado_ts: float | None = None
     legenda: str | None = None
+    # Cuando una persona vio el video y confirmo que muestra el producto del link.
+    fidelidad_ts: float | None = None
 
     @property
     def publicado(self) -> bool:
@@ -191,6 +193,9 @@ class VideosStore:
         if "legenda" not in columnas:
             self._conn.execute(
                 "ALTER TABLE videos_producidos ADD COLUMN legenda TEXT")
+        if "fidelidad_ts" not in columnas:
+            self._conn.execute(
+                "ALTER TABLE videos_producidos ADD COLUMN fidelidad_ts REAL")
         self._conn.commit()
 
     def registrar(
@@ -226,7 +231,9 @@ class VideosStore:
             "herramienta=excluded.herramienta, marca=excluded.marca, archivo=excluded.archivo, "
             # Sin legenda nueva se conserva la que habia: regenerar un link no
             # tiene por que perder el texto.
-            "legenda=COALESCE(excluded.legenda, videos_producidos.legenda)",
+            "legenda=COALESCE(excluded.legenda, videos_producidos.legenda), "
+            # Un video rehecho es otro video: hay que volver a mirarlo.
+            "fidelidad_ts=NULL",
             (int(item_id), canal, now, titulo, link, precio, comision_pct,
              herramienta, marca, archivo, legenda),
         )
@@ -253,6 +260,16 @@ class VideosStore:
             "UPDATE videos_producidos SET publicado_ts = ? "
             "WHERE item_id = ? AND canal = ?",
             (time.time() if cuando is None else cuando, int(item_id), canal),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def aprobar_fidelidad(self, item_id: int, canal: str) -> bool:
+        """Una persona vio el video y es fiel al producto del link: ya se puede
+        publicar. False si ese (item_id, canal) no existe."""
+        cur = self._conn.execute(
+            "UPDATE videos_producidos SET fidelidad_ts = ? WHERE item_id = ? AND canal = ?",
+            (time.time(), int(item_id), canal),
         )
         self._conn.commit()
         return cur.rowcount > 0
@@ -293,7 +310,7 @@ class VideosStore:
     def listar(self, canal: str | None = None, cuantos: int = 50) -> list[VideoProducido]:
         sql = (
             "SELECT item_id, canal, titulo, link, precio, comision_pct, herramienta, "
-            "marca, archivo, ts, publicado_ts, legenda FROM videos_producidos"
+            "marca, archivo, ts, publicado_ts, legenda, fidelidad_ts FROM videos_producidos"
         )
         args: list = []
         if canal:
@@ -306,7 +323,7 @@ class VideosStore:
                 item_id=f[0], canal=f[1], titulo=f[2] or "", link=f[3] or "",
                 precio=f[4], comision_pct=f[5], herramienta=f[6] or "",
                 marca=f[7] or "", archivo=f[8] or "", ts=f[9], publicado_ts=f[10],
-                legenda=f[11],
+                legenda=f[11], fidelidad_ts=f[12],
             )
             for f in self._conn.execute(sql, args).fetchall()
         ]

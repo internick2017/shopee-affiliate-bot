@@ -94,6 +94,9 @@ def _publicar_uno(args, store: VideosStore, log) -> tuple[int, bool]:
         video = next((v for v in store.sin_publicar(args.canal) if v.item_id == args.item_id), None)
     else:
         video = siguiente_video(store, args.canal)
+    if video is not None and not video.fidelidad_ts:
+        log.error("El video %s no tiene la fidelidad aprobada: corre scripts/video/revisar_fidelidad.py", video.item_id)
+        return 1, False
     if video is None:
         log.info("No hay video pendiente listo para publicar (%s).", args.canal)
         return 0, False
