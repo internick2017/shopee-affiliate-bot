@@ -206,6 +206,10 @@ class Celular:
         self.pasos.foto(self.d, "pagina_producto")
 
     def ir_a_shopee_video(self) -> None:
+        # Ese mismo punto en WhatsApp es el boton de videollamada (2026-10-26 llamo a Lanny).
+        if self.d.app_current().get("package") != "com.shopee.br":
+            self.pasos.foto(self.d, "no_es_shopee")
+            raise PublicacionAbortada("La app al frente no es Shopee: no toco a ciegas")
         self.d.click(510, 117)  # icono compartir de la barra superior, sin texto
         _pausa()
         self._tocar("Comissão de Afiliados", contiene=True)
