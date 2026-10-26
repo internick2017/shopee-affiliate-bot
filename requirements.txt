@@ -9,3 +9,5 @@ Pillow>=10.0,<12
 imageio-ffmpeg>=0.5,<1
 # Maneja la app de Shopee en el celular por ADB: Shopee Video no tiene API.
 uiautomator2>=3,<4
+# Mide el movimiento entre cuadros en el chequeo de fidelidad (src/fidelidad.py).
+numpy>=2,<3

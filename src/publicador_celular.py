@@ -106,11 +106,15 @@ def siguiente_video(
     store: VideosStore, canal: str, carpeta: Path = CARPETA_VIDEOS
 ) -> VideoProducido | None:
     """El video sin publicar mas reciente que esta listo: con legenda, titulo,
-    link y el archivo en disco. Los incompletos se saltean con un aviso en el log,
+    link, el archivo en disco y la fidelidad aprobada. Los incompletos se saltean con un aviso en el log,
     asi una ficha a medio hacer no frena la cola."""
     for v in store.sin_publicar(canal):
         if not v.legenda or not v.titulo or not v.link:
             log.warning("Salteo %s: le falta legenda, titulo o link", v.item_id)
+            continue
+        if not v.fidelidad_ts:
+            log.warning("Salteo %s: nadie confirmo que el video es fiel al producto "
+                        "(python scripts/video/revisar_fidelidad.py)", v.item_id)
             continue
         if not ruta_video(v.archivo, carpeta).is_file():
             log.warning("Salteo %s: no existe el archivo %s", v.item_id, v.archivo)
@@ -202,6 +206,10 @@ class Celular:
         self.pasos.foto(self.d, "pagina_producto")
 
     def ir_a_shopee_video(self) -> None:
+        # Ese mismo punto en WhatsApp es el boton de videollamada (2026-10-26 llamo a Lanny).
+        if self.d.app_current().get("package") != "com.shopee.br":
+            self.pasos.foto(self.d, "no_es_shopee")
+            raise PublicacionAbortada("La app al frente no es Shopee: no toco a ciegas")
         self.d.click(510, 117)  # icono compartir de la barra superior, sin texto
         _pausa()
         self._tocar("Comissão de Afiliados", contiene=True)

@@ -18,6 +18,7 @@ Uso:
     python aplicar_marca.py entrada.mp4 salida.mp4 --para lanny
     python aplicar_marca.py entrada.mp4 salida.mp4 --para setupjusto
     python aplicar_marca.py entrada.mp4 salida.mp4 --marca C:/ruta/otra.png
+    python aplicar_marca.py entrada.mp4 salida.mp4 --para nick --foto producto.jpg
 """
 
 from __future__ import annotations
@@ -31,6 +32,12 @@ from pathlib import Path
 ANCHO_MARCA = 220
 OPACIDAD = 0.75
 MARGEN = 28
+# Foto del producto: arriba a la izquierda (abajo a la izquierda choca con la
+# descripcion que Shopee dibuja sobre el video; abajo a la derecha va la marca).
+ANCHO_FOTO = 230
+BORDE_FOTO = 6
+MARGEN_FOTO_X = 24
+MARGEN_FOTO_Y = 150  # deja libre la barra de arriba de la app
 
 # Vive en scripts/video/ del repo del bot: la raiz esta dos niveles arriba.
 # Calcularla asi y no con una ruta absoluta permite mover o clonar el repo
@@ -58,8 +65,28 @@ def ffmpeg_exe() -> str:
         return "ffmpeg"
 
 
-def aplicar(entrada: Path, salida: Path, marca: Path, timeout: int = 300) -> bool:
+def filtro(con_foto: bool) -> str:
+    """Grafo de ffmpeg: entrada 0 = video, 1 = marca, 2 = foto del producto (opcional)."""
+    marca = (
+        f"[1:v]scale={ANCHO_MARCA}:-1,format=rgba,colorchannelmixer=aa={OPACIDAD}[wm];"
+    )
+    if not con_foto:
+        return marca + f"[0:v][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
+    lado = ANCHO_FOTO
+    return (
+        marca
+        + f"[2:v]scale={lado}:{lado}:force_original_aspect_ratio=decrease,"
+        f"pad={lado + 2 * BORDE_FOTO}:{lado + 2 * BORDE_FOTO}:(ow-iw)/2:(oh-ih)/2:white[ph];"
+        f"[0:v][ph]overlay={MARGEN_FOTO_X}:{MARGEN_FOTO_Y}[v1];"
+        f"[v1][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
+    )
+
+
+def aplicar(
+    entrada: Path, salida: Path, marca: Path, foto: Path | None = None, timeout: int = 300
+) -> bool:
     """Pega `marca` en la esquina inferior derecha de `entrada` y escribe `salida`.
+    Con `foto`, pega tambien la foto del producto arriba a la izquierda.
 
     Devuelve True si ffmpeg termino bien. No lanza: ante fallo imprime el error y
     devuelve False, para que el llamador pueda entregar el video sin marca en vez
@@ -71,11 +98,9 @@ def aplicar(entrada: Path, salida: Path, marca: Path, timeout: int = 300) -> boo
         print(f"No existe la marca de agua: {marca}", file=sys.stderr)
         return False
 
-    filtro = (
-        f"[1:v]scale={ANCHO_MARCA}:-1,format=rgba,"
-        f"colorchannelmixer=aa={OPACIDAD}[wm];"
-        f"[0:v][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
-    )
+    if foto is not None and not foto.is_file():
+        print(f"No existe la foto del producto: {foto}", file=sys.stderr)
+        return False
     cmd = [
         ffmpeg_exe(),
         "-y",
@@ -83,8 +108,9 @@ def aplicar(entrada: Path, salida: Path, marca: Path, timeout: int = 300) -> boo
         str(entrada),
         "-i",
         str(marca),
+        *(["-i", str(foto)] if foto else []),
         "-filter_complex",
-        filtro,
+        filtro(foto is not None),
         "-c:a",
         "copy",  # el audio (la narracion) pasa intacto, sin recomprimir
         str(salida),
@@ -107,10 +133,12 @@ def main() -> int:
     grupo = p.add_mutually_exclusive_group(required=True)
     grupo.add_argument("--para", choices=sorted(MARCAS), help="de quien es el canal")
     grupo.add_argument("--marca", type=Path, help="ruta a un PNG de marca propio")
+    p.add_argument("--foto", type=Path,
+                   help="foto del producto (limpia, sin texto) para pegar arriba a la izquierda")
     args = p.parse_args()
 
     marca = args.marca if args.marca else MARCAS[args.para]
-    ok = aplicar(args.entrada, args.salida, marca)
+    ok = aplicar(args.entrada, args.salida, marca, args.foto)
     if ok:
         print(f"Listo: {args.salida}  (marca: {marca.name})")
     return 0 if ok else 1

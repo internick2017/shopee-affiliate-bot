@@ -69,8 +69,22 @@ def test_siguiente_video_saltea_los_incompletos(tmp_path):
     store.registrar(3, canal="nick", titulo="Sin link", archivo="listo.mp4", legenda="x", now=300)
     store.registrar(4, canal="nick", titulo="Listo", link="l", archivo="listo.mp4", legenda="hola", now=100)
     store.registrar(5, canal="lanny", titulo="Otro canal", link="l", archivo="listo.mp4", legenda="x", now=600)
+    for i in (1, 2, 3, 4, 5):
+        store.aprobar_fidelidad(i, "nick")
     v = siguiente_video(store, "nick", tmp_path)
     assert v is not None and v.item_id == 4
+
+
+def test_siguiente_video_exige_fidelidad_aprobada(tmp_path):
+    store = VideosStore(tmp_path / "g.db")
+    (tmp_path / "a.mp4").write_bytes(b"x")
+    store.registrar(1, canal="nick", titulo="A", link="l", archivo="a.mp4", legenda="x")
+    assert siguiente_video(store, "nick", tmp_path) is None
+    store.aprobar_fidelidad(1, "nick")
+    assert siguiente_video(store, "nick", tmp_path).item_id == 1
+    # rehacer el video invalida la aprobacion: es otro video
+    store.registrar(1, canal="nick", titulo="A", link="l", archivo="a.mp4", legenda="x")
+    assert siguiente_video(store, "nick", tmp_path) is None
 
 
 def test_siguiente_video_no_repite_lo_publicado(tmp_path):
