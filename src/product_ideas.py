@@ -145,6 +145,9 @@ class Idea:
     link: str
     imagen_url: str | None
     puntaje: float
+    # productCatIds tal cual (nivel 1, 2, 3): la busqueda por palabra clave cruza
+    # categorias ("pote" trae potes de cozinha y potes de creatina).
+    categorias: tuple[int, ...] = ()
 
 
 def _normalizar(texto: str) -> str:
@@ -293,6 +296,7 @@ def _a_idea(nodo: dict) -> Idea | None:
             comision_pct=float(comision), ventas=ventas,
             rating=float(rating), precio=float(precio),
         ),
+        categorias=tuple(int(c) for c in nodo.get("productCatIds") or ()),
     )
 
 

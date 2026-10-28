@@ -490,3 +490,23 @@ def test_auto_post_con_hook_y_multiples_links_no_publica():
     )
 
     assert msg is None
+
+
+def test_pipeline_guarda_lo_publicado_para_la_cola_y_no_se_cae_si_falla(monkeypatch):
+    import src.mercadolivre_review as module
+
+    monkeypatch.setattr(module, "build_own_mercadolivre_links", lambda *a, **k: {
+        "https://meli.la/1Q8EMBW": "https://www.mercadolivre.com.br/p/MLB54629493?matt_word=x"})
+    guardados = []
+    poster = FakePoster()
+    pipe = MercadoLivreReviewPipeline(poster, matt_word="x", matt_tool="y", al_publicar=guardados.append)
+    assert asyncio.run(pipe.handle(PROMOCASINHA_ML)) == 1
+    assert guardados == poster.posts
+
+    def roto(_):
+        raise RuntimeError("db bloqueada")
+
+    poster2 = FakePoster()
+    pipe2 = MercadoLivreReviewPipeline(poster2, matt_word="x", matt_tool="y", al_publicar=roto)
+    assert asyncio.run(pipe2.handle(PROMOCASINHA_ML)) == 1
+    assert len(poster2.posts) == 1
