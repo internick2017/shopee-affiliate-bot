@@ -22,9 +22,11 @@ Amazon se ignoran) y el tag deja de ser obligatorio.
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 from src.amazon_pipeline import AmazonPipeline
 from src.channel_poster import ChannelPoster
+from src.cola_whatsapp import ColaStore
 from src.config import load_config
 from src.dedup_store import DedupStore
 from src.image_watermark import strip_watermark_from_media
@@ -197,6 +199,7 @@ async def main() -> None:
         matt_word=cfg["ml_matt_word"],
         matt_tool=cfg["ml_matt_tool"],
         hooks=hookbank,
+        al_publicar=ColaStore(Path(__file__).resolve().parent / "cola_whatsapp.db").agregar_ml,
     )
     handlers = [shopee_review, ml_review]
     if cfg["amazon_enabled"]:
