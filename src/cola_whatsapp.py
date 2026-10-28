@@ -33,7 +33,8 @@ from typing import Any
 
 from .models import Product
 from .post_builder import HookBank, build_post, rango_relevante
-from .product_ideas import Idea, _firma, _normalizar
+from .familias import familia as _familia
+from .product_ideas import Idea, _normalizar
 from .publicador_celular import bloqueado
 
 log = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ class Envio:
     item_id: int
     titulo: str
     texto: str
-    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto
+    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto | repetido
     enviado_ts: float | None = None
 
 
@@ -185,17 +186,19 @@ def armar_cola(
     hooks: HookBank,
     *,
     excluir: set[int],
+    excluir_familias: frozenset[str] = frozenset(),
     azar: random.Random | None = None,
 ) -> list[Envio]:
     """La cola del dia. `buscar(busqueda, excluir)` devuelve ideas ordenadas de
     mejor a peor; aca se reparten entre los horarios sin repetir producto ni
-    "tipo" de producto (la firma: dos organizadores de cajon seguidos aburren).
+    "tipo" de producto (la familia: dos organizadores de cajon seguidos aburren).
+    `excluir_familias` son los tipos ya mandados esta semana.
 
     Un horario que se queda sin candidato se saltea: mejor un hueco que un repetido."""
     azar = azar or random.Random()
     plan = plan_del_dia(fecha)
     usados = set(excluir)
-    firmas: set[str] = set()
+    firmas: set[str] = set(excluir_familias)
     pozos: dict[str, list[Idea]] = {}
     turno_hogar = fecha.toordinal()     # cada dia arranca por otra busqueda de hogar
     cola = []
@@ -212,7 +215,7 @@ def armar_cola(
             if b not in pozos:
                 pozos[b] = buscar(b, usados)
             for idea in pozos[b]:
-                if (idea.item_id not in usados and _firma(idea.titulo) not in firmas
+                if (idea.item_id not in usados and _familia(idea.titulo) not in firmas
                         and sirve(rubro, idea)):
                     elegida = idea
                     break
@@ -222,7 +225,7 @@ def armar_cola(
             log.warning("Sin producto para %s (%s): queda el hueco", hora, rubro)
             continue
         usados.add(elegida.item_id)
-        firmas.add(_firma(elegida.titulo))
+        firmas.add(_familia(elegida.titulo))
         cola.append(Envio(fecha.isoformat(), corrida(hora, azar), rubro, elegida.item_id,
                           elegida.titulo, texto_del_post(elegida, hooks.next())))
     return cola
@@ -235,6 +238,7 @@ def reemplazo(
     hooks: HookBank,
     *,
     excluir: set[int],
+    excluir_familias: frozenset[str] = frozenset(),
 ) -> tuple[Idea, str] | None:
     """Otro producto del mismo rubro para un horario cuyo post no sirvio (sin foto
     en la vista previa). Mismo horario, asi el tope diario y los porcentajes no se
@@ -242,7 +246,8 @@ def reemplazo(
     busquedas = list(HOGAR) if rubro in ("hogar", "ml") else [rubro]
     for b in busquedas:
         for idea in buscar(b, excluir):
-            if idea.item_id not in excluir and sirve(rubro, idea):
+            if (idea.item_id not in excluir and _familia(idea.titulo) not in excluir_familias
+                    and sirve(rubro, idea)):
                 return idea, texto_del_post(idea, hooks.next())
     return None
 
@@ -326,7 +331,8 @@ class ColaStore:
         )
         self._db.commit()
 
-    def candidato_ml(self, ahora: dt.datetime) -> tuple[str, str, str] | None:
+    def candidato_ml(self, ahora: dt.datetime,
+                     excluir_familias: frozenset[str] = frozenset()) -> tuple[str, str, str] | None:
         """(item_id, titulo, texto) de la oferta de ML de hogar mas reciente, fresca y
         no mandada esta semana; None si no hay."""
         lunes = dt.datetime.combine(ahora.date() - dt.timedelta(days=ahora.weekday()), dt.time())
@@ -335,12 +341,24 @@ class ColaStore:
             "AND (enviado_ts IS NULL OR enviado_ts < ?) ORDER BY ts DESC",
             (ahora.timestamp() - ML_FRESCA_HORAS * 3600, lunes.timestamp()),
         )
-        return next((f for f in filas if es_hogar_ml(f[1])), None)
+        return next((f for f in filas if es_hogar_ml(f[1])
+                     and _familia(f[1]) not in excluir_familias), None)
 
     def marcar_ml_enviado(self, item_id: str) -> None:
         self._db.execute("UPDATE ml_candidatos SET enviado_ts = ? WHERE item_id = ?",
                          (time.time(), item_id))
         self._db.commit()
+
+    def familias_de_la_semana(self, fecha: dt.date, *, salvo_hora: str | None = None) -> frozenset[str]:
+        """Tipos de producto ya mandados desde el lunes de esa semana, mas los que
+        quedan pendientes hoy (salvo el horario `salvo_hora`, que es el que se esta
+        resolviendo): un tipo no se repite en la semana."""
+        desde = (fecha - dt.timedelta(days=fecha.weekday())).isoformat()
+        filas = self._db.execute(
+            "SELECT titulo FROM envios WHERE fecha >= ? AND fecha <= ? AND "
+            "(estado = 'enviado' OR (fecha = ? AND estado = 'pendiente' AND hora != ?))",
+            (desde, fecha.isoformat(), fecha.isoformat(), salvo_hora or ""))
+        return frozenset(_familia(f[0]) for f in filas)
 
     def de_la_semana(self, fecha: dt.date) -> set[int]:
         """Productos planeados desde el lunes de esa semana (mandados o no): no se

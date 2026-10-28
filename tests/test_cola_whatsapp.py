@@ -166,3 +166,52 @@ def test_es_hogar_ml_descarta_suplementos_con_pote_en_el_titulo():
 
     assert not es_hogar_ml("03 POTES do PRÓPOLIS VERDE com 1000mg por Dose - Extrato")
     assert es_hogar_ml("Kit 10 Potes Herméticos Cozinha")
+
+
+def test_familia_agrupa_titulos_que_la_primera_palabra_no_junta():
+    from src.cola_whatsapp import _familia
+    assert len({_familia(t) for t in (
+        "Percarbonato 100% Puro Tira Manchas", "Maciez Tira manchas alvejantex 1kg + Percarbonatox",
+        "Kit Percarbonato Calisul 1kg")}) == 1
+    assert len({_familia(t) for t in (
+        "Kit 10 Pote Hermético Empilháveis", "Kit 12 Marmitas Potes 800ml", "Kit 5 Tigelas de Vidro Herméticas")}) == 1
+    assert _familia("Protetor Impermeável para Colchão") == _familia("Capa Protetora Colchão Box")
+    assert _familia("Potente Liquidificador") != _familia("Kit 10 Pote Hermético")
+
+
+def test_un_tipo_no_se_repite_en_el_dia_ni_si_viene_de_la_semana():
+    hogar = [idea(1, "Percarbonato Puro"), idea(2, "Maciez Tira manchas Percarbonatox"),
+             idea(3, "Kit 12 Marmitas Potes"), idea(4, "Kit 5 Tigelas Herméticas"),
+             idea(5, "Tapete banheiro"), idea(6, "Cortina voil")]
+    pozos = {b: hogar for b in ("casa", "organizador cozinha", "utensilios cozinha", "limpeza",
+                                "banheiro", "decoracao casa", "lavanderia", "potes",
+                                "cama mesa banho", "organizador")}
+    from src.cola_whatsapp import _familia
+    cola = armar_cola(MIERCOLES, buscador(pozos), HookBank(["OI"]), excluir=set(),
+                      excluir_familias=frozenset({_familia("Tapete banheiro")}))
+    fam = [_familia(e.titulo) for e in cola]
+    assert len(fam) == len(set(fam))
+    assert _familia("Tapete banheiro") not in fam
+
+
+def test_familias_de_la_semana_cuenta_enviados_y_pendientes_de_hoy(tmp_path):
+    from src.cola_whatsapp import _familia
+    st = ColaStore(tmp_path / "c.db")
+    st.guardar([Envio("2026-10-28", "08:00", "hogar", 1, "Percarbonato Puro", "t", "enviado"),
+                Envio("2026-10-28", "09:00", "hogar", 2, "Kit Marmitas Potes", "t", "pendiente"),
+                Envio("2026-10-28", "10:00", "hogar", 3, "Fone Bluetooth", "t", "vencido")])
+    assert st.familias_de_la_semana(MIERCOLES) == {_familia("Percarbonato"), _familia("Potes")}
+    assert st.familias_de_la_semana(MIERCOLES, salvo_hora="09:00") == {_familia("Percarbonato")}
+
+
+def test_cruzar_marca_el_tipo_ya_hecho_en_7_dias_y_dentro_del_lote():
+    import time
+    from src.familias import cruzar
+    ahora = time.time()
+    hist = [(ahora - 86400, "Kit Limpador Pastilha de máquina de lavar roupa", "video lanny"),
+            (ahora - 20 * 86400, "Cortina voil", "video lanny")]
+    r = dict(cruzar(["Tanquinho Colormaq 15kg", "Cortina voil nova", "Escova elétrica", "Mangueiras Tanquinho"],
+                    hist, ahora))
+    assert r["Tanquinho Colormaq 15kg"] and r["Mangueiras Tanquinho"]
+    assert any("este mismo lote" in c for c in r["Mangueiras Tanquinho"])
+    assert not r["Cortina voil nova"] and not r["Escova elétrica"]
