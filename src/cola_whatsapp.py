@@ -94,7 +94,7 @@ class Envio:
     item_id: int
     titulo: str
     texto: str
-    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido
+    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto
     enviado_ts: float | None = None
 
 
@@ -334,6 +334,10 @@ class CelularNoDisponible(EnvioAbortado):
     """Bloqueado o en uso: el post queda pendiente y se prueba en la proxima corrida."""
 
 
+class SinFoto(EnvioAbortado):
+    """El link no da foto para la vista previa: sin foto el post no vende, no se manda."""
+
+
 class WhatsApp:
     def __init__(self, d: Any, pasos: Any):
         self.d = d
@@ -361,6 +365,23 @@ class WhatsApp:
             self.pasos.foto(self.d, "no_es_el_grupo")
             raise EnvioAbortado(f"El chat abierto no es {grupo!r}")
 
+    def _tarjeta_con_foto(self, espera: float = 20) -> bool:
+        """Medido 2026-10-28: con foto, la tarjeta tiene `thumb` desde el principio y
+        suma `thumb_cross_fade` cuando la imagen carga. Sin foto (Shopee no la da para
+        ese link) carga el `title` enseguida y nunca tiene `thumb`."""
+        cargada = self.d(resourceId=f"{PAQUETE}:id/thumb_cross_fade")
+        titulo = self.d(resourceId=f"{PAQUETE}:id/link_preview_content").child(
+            resourceId=f"{PAQUETE}:id/title")
+        limite = time.time() + espera
+        while time.time() < limite:
+            if cargada.exists:
+                time.sleep(1)  # que termine el fundido de la imagen
+                return True
+            if titulo.exists and not self.d(resourceId=f"{PAQUETE}:id/thumb").exists:
+                return False
+            time.sleep(1)
+        return False
+
     def mandar(self, texto: str, *, enviar: bool) -> None:
         caja = self.d(resourceId=f"{PAQUETE}:id/entry")
         if not caja.wait(timeout=10):
@@ -369,11 +390,11 @@ class WhatsApp:
         if caja.get_text() != texto:
             caja.clear_text()
             raise EnvioAbortado("El texto no quedo entero en la caja")
-        # Sin la vista previa el post sale sin foto: se espera, pero no se aborta,
-        # porque el link igual sirve.
-        if not self.d(resourceId=f"{PAQUETE}:id/link_preview_content").wait(timeout=15):
-            log.warning("WhatsApp no armo la vista previa del link")
-        time.sleep(3)  # la tarjeta tarda unos segundos mas en llenarse con la foto
+        if not self._tarjeta_con_foto():
+            self.pasos.foto(self.d, "sin_foto")
+            caja.clear_text()
+            self.d.press("back")
+            raise SinFoto("La vista previa del link no trae foto")
         self.pasos.foto(self.d, "listo_para_enviar")
         if not enviar:
             caja.clear_text()

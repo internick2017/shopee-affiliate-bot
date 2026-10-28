@@ -33,6 +33,7 @@ from src.cola_whatsapp import (  # noqa: E402
     CelularNoDisponible,
     ColaStore,
     EnvioAbortado,
+    SinFoto,
     WhatsApp,
     a_enviar,
     armar_cola,
@@ -129,6 +130,11 @@ def main() -> int:
         wa.mandar(texto, enviar=args.enviar)
     except CelularNoDisponible as exc:
         log.info("No mando %s todavia: %s. Pruebo en la proxima corrida.", toca.hora, exc)
+        return 0
+    except SinFoto as exc:
+        log.warning("Salteo %s %s: %s", toca.hora, toca.titulo, exc)
+        if args.enviar:
+            store.marcar(toca, "sin_foto")
         return 0
     except EnvioAbortado as exc:
         log.error("No se mando %s %s: %s", toca.hora, toca.titulo, exc)
