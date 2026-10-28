@@ -57,6 +57,9 @@ HOGAR_ML = (
     "cafeteira", "chaleira", "ventilador", "cesto", "varal", "sapateira", "luminaria",
     "colcha", "manta", "aspirador", "faca", "tabua", "marmita",
 )
+# Palabras que delatan un suplemento aunque el titulo diga "pote" o "potes".
+NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemento",
+               "capsula", "omega 3", "mg por dose", "por dose")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 3 * 60 * 1000
@@ -145,6 +148,9 @@ def sirve(rubro: str, idea: Idea) -> bool:
 
 def es_hogar_ml(titulo: str) -> bool:
     t = _normalizar(titulo)
+    # "03 POTES do PROPOLIS 1000mg" es un suplemento, no un pote de cocina.
+    if any(p in t for p in NO_HOGAR_ML):
+        return False
     return any(p in t for p in HOGAR_ML)
 
 
@@ -373,13 +379,24 @@ class WhatsApp:
         titulo = self.d(resourceId=f"{PAQUETE}:id/link_preview_content").child(
             resourceId=f"{PAQUETE}:id/title")
         limite = time.time() + espera
+        sin_thumb = 0   # segundos seguidos con titulo y sin thumb
         while time.time() < limite:
             if cargada.exists:
                 time.sleep(1)  # que termine el fundido de la imagen
                 return True
             if titulo.exists and not self.d(resourceId=f"{PAQUETE}:id/thumb").exists:
-                return False
+                sin_thumb += 1
+                # 2026-10-28 12:44: un solo sondeo dio "sin foto" con la foto a la vista
+                # (carrera con la animacion). Hace falta que se sostenga unos segundos.
+                if sin_thumb >= 5:
+                    break
+            else:
+                sin_thumb = 0
             time.sleep(1)
+        # Volcado para ver que ids tenia la pantalla si vuelve a pasar.
+        self.pasos.foto(self.d, "sin_foto_jerarquia")
+        (Path(self.pasos.carpeta) / "jerarquia.xml").write_text(
+            self.d.dump_hierarchy(), encoding="utf-8")
         return False
 
     def mandar(self, texto: str, *, enviar: bool) -> None:
@@ -390,7 +407,7 @@ class WhatsApp:
         if caja.get_text() != texto:
             caja.clear_text()
             raise EnvioAbortado("El texto no quedo entero en la caja")
-        if not self._tarjeta_con_foto():
+        if not (self._tarjeta_con_foto() or self._tarjeta_con_foto(espera=10)):
             self.pasos.foto(self.d, "sin_foto")
             caja.clear_text()
             self.d.press("back")

@@ -141,3 +141,10 @@ def test_ml_mandado_la_semana_pasada_vuelve(tmp_path):
     store.agregar_ml(POST_ML, ahora=lunes.timestamp() - 100)
     store._db.execute("UPDATE ml_candidatos SET enviado_ts = ?", (lunes.timestamp() - 3 * 86400,))
     assert store.candidato_ml(lunes)[0] == "MLB123"
+
+
+def test_es_hogar_ml_descarta_suplementos_con_pote_en_el_titulo():
+    from src.cola_whatsapp import es_hogar_ml
+
+    assert not es_hogar_ml("03 POTES do PRÓPOLIS VERDE com 1000mg por Dose - Extrato")
+    assert es_hogar_ml("Kit 10 Potes Herméticos Cozinha")
