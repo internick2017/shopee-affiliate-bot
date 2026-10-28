@@ -57,6 +57,9 @@ HOGAR_ML = (
     "cafeteira", "chaleira", "ventilador", "cesto", "varal", "sapateira", "luminaria",
     "colcha", "manta", "aspirador", "faca", "tabua", "marmita",
 )
+# Palabras que delatan un suplemento aunque el titulo diga "pote" o "potes".
+NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemento",
+               "capsula", "omega 3", "mg por dose", "por dose")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 3 * 60 * 1000
@@ -145,6 +148,9 @@ def sirve(rubro: str, idea: Idea) -> bool:
 
 def es_hogar_ml(titulo: str) -> bool:
     t = _normalizar(titulo)
+    # "03 POTES do PROPOLIS 1000mg" es un suplemento, no un pote de cocina.
+    if any(p in t for p in NO_HOGAR_ML):
+        return False
     return any(p in t for p in HOGAR_ML)
 
 
@@ -222,6 +228,25 @@ def armar_cola(
     return cola
 
 
+def reemplazo(
+    rubro: str,
+    fecha: dt.date,
+    buscar: Callable[[str, set[int]], list[Idea]],
+    hooks: HookBank,
+    *,
+    excluir: set[int],
+) -> tuple[Idea, str] | None:
+    """Otro producto del mismo rubro para un horario cuyo post no sirvio (sin foto
+    en la vista previa). Mismo horario, asi el tope diario y los porcentajes no se
+    mueven. Un horario de ML cae al hogar de Shopee, como su respaldo."""
+    busquedas = list(HOGAR) if rubro in ("hogar", "ml") else [rubro]
+    for b in busquedas:
+        for idea in buscar(b, excluir):
+            if idea.item_id not in excluir and sirve(rubro, idea):
+                return idea, texto_del_post(idea, hooks.next())
+    return None
+
+
 def a_enviar(cola: list[Envio], ahora: dt.datetime) -> tuple[Envio | None, list[Envio]]:
     """(el que toca mandar ahora, los que ya no vale la pena mandar).
 
@@ -277,11 +302,13 @@ class ColaStore:
         self._db.commit()
         e.estado, e.enviado_ts = estado, ts
 
-    def reemplazar(self, e: Envio, titulo: str, texto: str) -> None:
-        self._db.execute("UPDATE envios SET titulo = ?, texto = ? WHERE fecha = ? AND hora = ?",
-                         (titulo, texto, e.fecha, e.hora))
+    def reemplazar(self, e: Envio, titulo: str, texto: str, item_id: int | None = None) -> None:
+        item_id = e.item_id if item_id is None else item_id
+        self._db.execute(
+            "UPDATE envios SET titulo = ?, texto = ?, item_id = ? WHERE fecha = ? AND hora = ?",
+            (titulo, texto, item_id, e.fecha, e.hora))
         self._db.commit()
-        e.titulo, e.texto = titulo, texto
+        e.titulo, e.texto, e.item_id = titulo, texto, item_id
 
     def agregar_ml(self, texto: str, *, ahora: float | None = None) -> None:
         """Lo llama el bot de ofertas cada vez que publica una oferta de ML ya
