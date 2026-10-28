@@ -216,6 +216,7 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         matt_word: str | None = None,
         matt_tool: str | None = None,
         hooks=None,
+        al_publicar=None,
     ):
         super().__init__(
             poster,
@@ -228,6 +229,8 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
         self._matt_word = matt_word
         self._matt_tool = matt_tool
         self._hooks = hooks
+        # La cola del grupo de WhatsApp guarda cada post de ML publicado como candidato.
+        self._al_publicar = al_publicar
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
         # Igual que AmazonPipeline._expanded: solo se spawnea el thread de resolución
@@ -253,6 +256,11 @@ class MercadoLivreReviewPipeline(ReviewPipeline):
                         self._dedup.release(key)
                     raise
                 logger.info("Oferta de Mercado Livre auto-monetizada y publicada")
+                if self._al_publicar:
+                    try:
+                        self._al_publicar(auto_msg)
+                    except Exception:  # la cola nunca tiene que frenar al canal
+                        logger.exception("No pude guardar la oferta de ML para la cola de WhatsApp")
                 return 1
 
         return await super().handle(text, chat_title, photo=photo)
