@@ -2,7 +2,7 @@
 
 Plan de Nick (2026-10-28, ver docs/analisis-grupo-whatsapp-2026-10-28.md):
 
-  - 2 posts por hora, de 8:00 a 20:30 (el ultimo sale antes de las 21), de lunes a sabado. Domingo nada.
+  - 2 posts por hora, de 8:00 a 21:30, de lunes a sabado. Domingo nada.
   - 80 % hogar, 20 % el rubro del dia (lunes masculino, martes belleza, miercoles
     electronicos, jueves ninos, viernes moda femenina, sabado una mezcla).
   - La cola se arma de cero cada manana con lo que Shopee tenga ese dia: precio,
@@ -43,7 +43,7 @@ GRUPO = "#1 Nosso Grupo | Lanny"
 PAQUETE = "com.whatsapp"
 
 PRIMERA_HORA = 8
-ULTIMA_HORA = 20            # el ultimo envio es 20:30 (20:45 con el azar): a las 21 ya no sale nada
+ULTIMA_HORA = 21            # el ultimo envio es 21:30
 PORCENTAJE_RUBRO = 0.2
 # Mercado Livre sale de las ofertas que el bot ya monetiza con el link de Lanny, no de
 # una busqueda: se elige al momento de mandar, porque una oferta de ML dura horas.
