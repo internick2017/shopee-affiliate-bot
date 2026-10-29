@@ -61,6 +61,9 @@ HOGAR_ML = (
 # Palabras que delatan un suplemento aunque el titulo diga "pote" o "potes".
 NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemento",
                "capsula", "omega 3", "mg por dose", "por dose")
+# Productos de auto que el vendedor carga en Casa e Cozinha (2026-10-29: un conector
+# de inflador de pneus salio como post de hogar). Palabras enteras: "carro" no es "carrinho".
+NO_CASA = ("pneu", "pneus", "automotivo", "automotiva", "veicular", "carro", "carros", "moto")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 3 * 60 * 1000
@@ -144,7 +147,10 @@ def sirve(rubro: str, idea: Idea) -> bool:
     """Hogar tiene que ser de Casa e Cozinha: buscar "potes" tambien trae creatina."""
     if idea.precio > PRECIO_MAXIMO:
         return False
-    return rubro not in ("hogar", "ml") or idea.categorias[:1] == (CASA_E_COZINHA,)
+    if rubro not in ("hogar", "ml"):
+        return True
+    palabras = set(re.findall(r"[a-z0-9]+", _normalizar(idea.titulo)))
+    return idea.categorias[:1] == (CASA_E_COZINHA,) and not palabras & set(NO_CASA)
 
 
 def es_hogar_ml(titulo: str) -> bool:
@@ -394,7 +400,7 @@ class WhatsApp:
 
         return cls(u2.connect(serial), pasos)
 
-    def abrir_grupo(self, link: str, grupo: str = GRUPO) -> None:
+    def abrir_grupo(self, link: str, grupo: str = GRUPO, *, revisar_uso: bool = True) -> None:
         """Entra por el link de invitacion: si el numero ya es del grupo, WhatsApp
         abre el chat directo (medido 2026-10-28). Buscar por nombre en la lista de
         chats seria tocar resultados parecidos."""
@@ -402,7 +408,7 @@ class WhatsApp:
         time.sleep(1)
         if bloqueado(self.d.shell("dumpsys window").output):
             raise CelularNoDisponible("El celular esta bloqueado")
-        if en_uso(self.d.shell("dumpsys power").output):
+        if revisar_uso and en_uso(self.d.shell("dumpsys power").output):
             raise CelularNoDisponible("Alguien esta usando el celular")
         self.d.shell(f'am start -a android.intent.action.VIEW -d "{link}" {PAQUETE}')
         titulo = self.d(resourceId=f"{PAQUETE}:id/conversation_contact_name")
@@ -461,4 +467,60 @@ class WhatsApp:
         self.pasos.foto(self.d, "despues_de_enviar")
         if caja.get_text() == texto:
             raise EnvioAbortado("Despues de Enviar el texto sigue en la caja")
+        self.d.press("back")
+
+    def _descartar_foto(self) -> None:
+        """Salir del editor sin mandar: WhatsApp pregunta "Deseja descartar a foto?"."""
+        self.d.press("back")
+        descartar = self.d(text="Descartar")
+        if descartar.wait(timeout=5):
+            descartar.click()
+        self.d.press("back")  # de la lista de chats para compartir
+
+    def mandar_con_foto(self, texto: str, foto: Path, grupo: str = GRUPO, *, enviar: bool) -> None:
+        """Si la vista previa del link no trae foto, la foto del producto va como imagen
+        y el post como leyenda (2026-10-29: se perdian horarios enteros por esto). Se
+        comparte al grupo con el intent SEND, eligiendo el grupo por su nombre exacto."""
+        destino = f"/sdcard/Download/cola/{foto.name}"
+        self.d.push(str(foto), destino)
+        self.d.shell(f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{destino}")
+        self.d.shell(f"am start -a android.intent.action.SEND -t image/jpeg "
+                     f"--eu android.intent.extra.STREAM file://{destino} -p {PAQUETE}")
+        fila = self.d(text=grupo, resourceId=f"{PAQUETE}:id/contactpicker_row_name")
+        if not fila.wait(timeout=15):
+            self.pasos.foto(self.d, "sin_grupo_para_compartir")
+            self.d.press("back")
+            raise EnvioAbortado(f"No aparecio {grupo!r} para compartir la foto")
+        fila.click()
+        miniatura = self.d(resourceId=f"{PAQUETE}:id/thumbnail")  # abre el editor (medido 2026-10-29)
+        if not miniatura.wait(timeout=10):
+            self.pasos.foto(self.d, "sin_miniatura")
+            self.d.press("back")
+            raise EnvioAbortado("No aparecio la miniatura de la foto")
+        miniatura.click()
+        leyenda = self.d(resourceId=f"{PAQUETE}:id/caption")
+        if not leyenda.wait(timeout=15):
+            self.pasos.foto(self.d, "sin_editor")
+            raise EnvioAbortado("No se abrio el editor de la foto")
+        leyenda.click()
+        leyenda.set_text(texto)
+        time.sleep(1)
+        if self.d(description="Barra de espaço").exists:  # el teclado tapa el boton de enviar
+            self.d.press("back")
+        # WhatsApp puede normalizar espacios del final: alcanza con que este entero el cuerpo.
+        if (leyenda.get_text() or "").strip() != texto.strip():
+            self.pasos.foto(self.d, "leyenda_incompleta")
+            self._descartar_foto()
+            raise EnvioAbortado("La leyenda no quedo entera")
+        if not self.d(text=grupo).exists:
+            self.pasos.foto(self.d, "otro_destinatario")
+            self._descartar_foto()
+            raise EnvioAbortado(f"El destinatario no es {grupo!r}")
+        self.pasos.foto(self.d, "foto_lista_para_enviar")
+        if not enviar:
+            self._descartar_foto()
+            return
+        self.d(resourceId=f"{PAQUETE}:id/send").click()
+        time.sleep(4)
+        self.pasos.foto(self.d, "foto_enviada")
         self.d.press("back")

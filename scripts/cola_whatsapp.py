@@ -22,6 +22,7 @@ import msvcrt
 import os
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -43,6 +44,7 @@ from src.logging_setup import configurar_logging  # noqa: E402
 from src.post_builder import HookBank  # noqa: E402
 from src.product_ideas import buscar_ideas  # noqa: E402
 from src.publicador_celular import Pasos  # noqa: E402
+from src.shopee_resolver import _graphql_call  # noqa: E402
 
 # Cuanto esperar el celular si lo tiene el publicador de Shopee Video: una
 # publicacion tarda unos 2 minutos.
@@ -68,6 +70,22 @@ def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
     if guardar:
         store.guardar(cola)
     return cola
+
+
+def bajar_foto(item_id: int, app: str, sec: str, carpeta: Path) -> Path | None:
+    """Primera imagen del producto segun la API de afiliados (la misma que se usa en
+    los videos). None si Shopee no la da o no se puede bajar."""
+    query = f"query {{ productOfferV2(itemId: {item_id}, limit: 1) {{ nodes {{ itemId imageUrl }} }} }}"
+    nodos = ((_graphql_call(app, sec, query) or {}).get("productOfferV2") or {}).get("nodes") or []
+    if not nodos or int(nodos[0].get("itemId") or 0) != item_id or not nodos[0].get("imageUrl"):
+        return None
+    carpeta.mkdir(parents=True, exist_ok=True)
+    destino = carpeta / f"{item_id}.jpg"
+    try:
+        urllib.request.urlretrieve(nodos[0]["imageUrl"], destino)
+    except OSError:
+        return None
+    return destino if destino.stat().st_size > 0 else None
 
 
 def tomar_celular(log):
@@ -135,11 +153,22 @@ def main() -> int:
         wa = WhatsApp.conectar(pasos)
         for intento in range(MAX_REEMPLAZOS + 1):
             try:
-                wa.abrir_grupo(os.environ["WHATSAPP_GRUPO_LINK"])
+                # En un reemplazo el ultimo toque fue nuestro (2026-10-29: se trababa solo).
+                wa.abrir_grupo(os.environ["WHATSAPP_GRUPO_LINK"], revisar_uso=intento == 0)
                 wa.mandar(texto, enviar=args.enviar)
                 break
             except SinFoto as exc:
                 log.warning("Sin foto %s %s: %s", toca.hora, toca.titulo, exc)
+                if ml is None:  # la foto es de Shopee: un ML sin foto cae al reemplazo
+                    foto = bajar_foto(toca.item_id, app, sec, Path(pasos.carpeta))
+                    try:
+                        if foto is None:
+                            raise EnvioAbortado("La API no dio la foto del producto")
+                        wa.mandar_con_foto(texto, foto, enviar=args.enviar)
+                        log.info("%s va con la foto del producto como imagen", toca.hora)
+                        break
+                    except EnvioAbortado as e:
+                        log.warning("Tampoco con la foto como imagen: %s", e)
                 nuevo = None
                 if args.enviar and intento < MAX_REEMPLAZOS:
                     nuevo = reemplazo(

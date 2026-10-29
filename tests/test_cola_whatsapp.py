@@ -13,6 +13,7 @@ from src.cola_whatsapp import (
     en_uso,
     plan_del_dia,
     reemplazo,
+    sirve,
     texto_del_post,
 )
 from src.post_builder import HookBank
@@ -222,3 +223,12 @@ def test_cruzar_marca_el_tipo_ya_hecho_en_7_dias_y_dentro_del_lote():
     assert r["Tanquinho Colormaq 15kg"] and r["Mangueiras Tanquinho"]
     assert any("este mismo lote" in c for c in r["Mangueiras Tanquinho"])
     assert not r["Cortina voil nova"] and not r["Escova elétrica"]
+
+
+def test_hogar_descarta_productos_de_auto_cargados_en_casa_e_cozinha():
+    # 2026-10-29 12:39: un conector de inflador de pneus salio como post de hogar.
+    auto = idea(1, "KOOL Auto Todo O Conector Do Inflador Pneus Compressor Ar Mandril Metal")
+    assert not sirve("hogar", auto)
+    assert not sirve("ml", idea(2, "Suporte veicular para celular"))
+    assert sirve("hogar", idea(3, "Carrinho de feira dobravel"))  # carrinho no es carro
+    assert sirve("infantil", idea(4, "Carro de controle remoto", categorias=(1, 2, 3)))
