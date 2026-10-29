@@ -388,6 +388,13 @@ class PublicacionesStore:
         ).fetchone()
         return fila[0] if fila else None
 
+    def link_publicado(self, item_id: int, canal: str, plataforma: str) -> str | None:
+        fila = self._conn.execute(
+            "SELECT link FROM publicaciones WHERE item_id = ? AND canal = ? AND plataforma = ?",
+            (int(item_id), canal, plataforma),
+        ).fetchone()
+        return fila[0] if fila else None
+
     def ids_publicados(self, canal: str, plataforma: str) -> set[int]:
         return {int(f[0]) for f in self._conn.execute(
             "SELECT item_id FROM publicaciones WHERE canal = ? AND plataforma = ?",

@@ -69,6 +69,7 @@ def test_publicar_sube_guarda_y_comenta(store, mp4):
     assert llamadas["comentar"] == ("VID1", "Link do produto: https://s.shopee.com.br/YT58")
     assert store.id_externo(58, "lanny", "youtube") == "VID1"
     assert store.ids_publicados("lanny", "youtube") == {58}
+    assert store.link_publicado(58, "lanny", "youtube") == "https://s.shopee.com.br/YT58"
 
 
 def test_no_sube_dos_veces(store, mp4):

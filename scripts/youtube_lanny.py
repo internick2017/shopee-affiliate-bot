@@ -6,6 +6,7 @@ Uso:
     python scripts/youtube_lanny.py pendientes             # videos de Lanny que faltan en YouTube
     python scripts/youtube_lanny.py subir <item_id> --simular   # muestra titulo, texto y link
     python scripts/youtube_lanny.py subir <item_id> [--privado] # sube, guarda y comenta el link
+    python scripts/youtube_lanny.py comentar <item_id>    # el link como comentario (video ya publico)
     python scripts/youtube_lanny.py rescatar <item_id> <video_id> <link>  # subio pero no guardo
 
 Autorizar: abrir el enlace en el Chrome donde esta la sesion de herreralanny@gmail.com,
@@ -79,6 +80,9 @@ def main() -> int:
     s.add_argument("item_id", type=int)
     s.add_argument("--privado", action="store_true")
     s.add_argument("--simular", action="store_true", help="no toca YouTube")
+    c = sub.add_parser("comentar", help="YouTube no deja comentar un video privado: "
+                                          "correr esto despues de pasarlo a publico")
+    c.add_argument("item_id", type=int)
     r = sub.add_parser("rescatar")
     r.add_argument("item_id", type=int)
     r.add_argument("video_id")
@@ -108,6 +112,21 @@ def main() -> int:
                        id_externo=args.video_id, link=args.link)
         print(f"Guardado: {args.item_id} = https://youtube.com/shorts/{args.video_id}")
         return 0
+
+    if args.cmd == "comentar":
+        vid = pubs.id_externo(args.item_id, CANAL, PLATAFORMA)
+        if not vid:
+            sys.exit(f"{args.item_id} no esta en YouTube todavia")
+        cid, sec = _cliente_oauth()
+        refresh = pubs.credencial(TOKEN)
+        token = refresh and canal_youtube.renovar_token(refresh, cid, sec)
+        if not token:
+            sys.exit("No se pudo renovar el acceso: corre 'autorizar'")
+        ok = canal_youtube.comentar(vid, comentario(pubs.link_publicado(args.item_id, CANAL, PLATAFORMA)),
+                                    token)
+        print("Comentario listo (fijarlo a mano en Studio)" if ok
+              else "Fallo el comentario: el video sigue privado?")
+        return 0 if ok else 1
 
     videos = VideosStore(db)
     if args.cmd == "pendientes":
@@ -147,8 +166,13 @@ def main() -> int:
         sys.exit(f"No se publico: {exc}")
     print(f"Subido{' (privado)' if args.privado else ''}: https://youtube.com/shorts/{res.video_id}")
     print(f"Link: {res.link}")
-    print("Comentario con el link: " + ("listo (fijarlo a mano en Studio)" if res.comentado
-                                        else "FALLO, ponerlo a mano"))
+    if res.comentado:
+        print("Comentario con el link: listo (fijarlo a mano en Studio)")
+    elif args.privado:
+        print(f"Comentario: YouTube no deja comentar un video privado. Al pasarlo a publico: "
+              f"python scripts/youtube_lanny.py comentar {video.item_id}")
+    else:
+        print(f"Comentario: FALLO. Reintentar con: python scripts/youtube_lanny.py comentar {video.item_id}")
     return 0
 
 
