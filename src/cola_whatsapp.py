@@ -538,4 +538,27 @@ class WhatsApp:
         self.d(resourceId=f"{PAQUETE}:id/send").click()
         time.sleep(4)
         self.pasos.foto(self.d, "foto_enviada")
+        # 2026-10-29 17:15: la foto salio sin leyenda aunque la captura previa la mostraba.
+        # Si el link no aparece en el chat, el post va como texto debajo de la foto.
+        if self.falta_leyenda(texto):
+            self.pasos.foto(self.d, "foto_sin_leyenda")
+            self.texto_suelto(texto)
         self.d.press("back")
+
+    def falta_leyenda(self, texto: str) -> bool:
+        """True si el link del post no aparece en el chat despues de mandar la foto."""
+        link = re.search(r"https?://\S+", texto)
+        return bool(link) and not self.d(textContains=link.group(0)).wait(timeout=10)
+
+    def texto_suelto(self, texto: str) -> None:
+        """Manda el texto tal cual en el chat abierto, sin mirar la vista previa."""
+        caja = self.d(resourceId=f"{PAQUETE}:id/entry")
+        if not caja.wait(timeout=10):
+            raise EnvioAbortado("No aparecio la caja de mensaje para el texto")
+        caja.set_text(texto)
+        if caja.get_text() != texto:
+            caja.clear_text()
+            raise EnvioAbortado("El texto no quedo entero en la caja")
+        self.d(resourceId=f"{PAQUETE}:id/send").click()
+        time.sleep(3)
+        self.pasos.foto(self.d, "texto_suelto_enviado")

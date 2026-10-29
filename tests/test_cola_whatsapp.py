@@ -258,3 +258,20 @@ def test_enviando_no_se_vuelve_a_mandar_y_ultimo_envio(tmp_path):
     assert store.ultimo_envio(hoy) is None
     store.marcar(b, "enviado")
     assert store.ultimo_envio(hoy) is not None
+
+
+def test_falta_leyenda_si_el_link_no_aparece_en_el_chat():
+    # 2026-10-29 17:15: la foto llego al grupo sin leyenda ni link.
+    from unittest.mock import MagicMock
+
+    from src.cola_whatsapp import WhatsApp
+
+    d = MagicMock()
+    wa = WhatsApp(d, MagicMock())
+    texto = "Kit camisas\nCompre aqui: https://s.shopee.com.br/1W0KWecbKO"
+    d.return_value.wait.return_value = False
+    assert wa.falta_leyenda(texto)
+    d.assert_called_with(textContains="https://s.shopee.com.br/1W0KWecbKO")
+    d.return_value.wait.return_value = True
+    assert not wa.falta_leyenda(texto)
+    assert not wa.falta_leyenda("sin link")
