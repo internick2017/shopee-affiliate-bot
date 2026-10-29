@@ -62,8 +62,9 @@ HOGAR_ML = (
 NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemento",
                "capsula", "omega 3", "mg por dose", "por dose")
 # Productos de auto que el vendedor carga en Casa e Cozinha (2026-10-29: un conector
-# de inflador de pneus salio como post de hogar). Palabras enteras: "carro" no es "carrinho".
-NO_CASA = ("pneu", "pneus", "automotivo", "automotiva", "veicular", "carro", "carros", "moto")
+# de inflador de pneus salio como post de hogar). Palabras enteras y especificas:
+# "carro" solo no sirve, la espuma de limpieza dice "Sofa, Estofado, Banco de Carro".
+NO_CASA = ("pneu", "pneus", "automotivo", "automotiva", "automotivos", "veicular")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 3 * 60 * 1000

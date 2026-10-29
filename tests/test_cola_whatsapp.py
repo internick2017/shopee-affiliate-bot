@@ -230,5 +230,5 @@ def test_hogar_descarta_productos_de_auto_cargados_en_casa_e_cozinha():
     auto = idea(1, "KOOL Auto Todo O Conector Do Inflador Pneus Compressor Ar Mandril Metal")
     assert not sirve("hogar", auto)
     assert not sirve("ml", idea(2, "Suporte veicular para celular"))
-    assert sirve("hogar", idea(3, "Carrinho de feira dobravel"))  # carrinho no es carro
+    assert sirve("hogar", idea(3, "Espuma Spray Zip Clean Limpa a Seco Sofa, Estofado, Banco de Carro"))
     assert sirve("infantil", idea(4, "Carro de controle remoto", categorias=(1, 2, 3)))
