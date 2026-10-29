@@ -110,9 +110,9 @@ def test_la_hora_se_corre_al_azar_sin_juntar_dos_posts():
     assert horas[0] >= "08:00" and horas[-1] <= "21:45"
 
 
-def test_en_uso_si_lo_tocaron_hace_menos_de_tres_minutos():
-    assert en_uso("  lastUserActivityTime=997410661 (138109 ms ago)")  # medido 2026-10-28
-    assert not en_uso("lastUserActivityTime=997410661 (180000 ms ago)")
+def test_en_uso_si_lo_tocaron_hace_menos_de_30_segundos():
+    assert en_uso("  lastUserActivityTime=997410661 (20000 ms ago)")
+    assert not en_uso("lastUserActivityTime=997410661 (30000 ms ago)")
     assert not en_uso("sin el dato")
 
 
