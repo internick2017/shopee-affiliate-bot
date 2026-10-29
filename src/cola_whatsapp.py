@@ -548,7 +548,7 @@ class WhatsApp:
     def falta_leyenda(self, texto: str) -> bool:
         """True si el link del post no aparece en el chat despues de mandar la foto."""
         link = re.search(r"https?://\S+", texto)
-        return bool(link) and not self.d(textContains=link.group(0)).wait(timeout=10)
+        return link is not None and not self.d(textContains=link.group(0)).wait(timeout=10)
 
     def texto_suelto(self, texto: str) -> None:
         """Manda el texto tal cual en el chat abierto, sin mirar la vista previa."""
