@@ -8,7 +8,7 @@ import pytest
 
 from src.grabados_store import VideosStore
 from src.shopee_resolver import ShopeeOffer
-from src.video_canal import credenciales, registrar_video
+from src.video_canal import credenciales, link_del_canal, registrar_video
 
 ENV = {
     "SHOPEE_APP_ID": "app-lanny", "SHOPEE_SECRET": "sec-lanny",
@@ -75,3 +75,17 @@ def test_la_oferta_sin_item_id_no_se_puede_registrar(store):
     of.item_id = None
     with pytest.raises(ValueError, match="item_id"):
         registrar_video(store, of, canal="nick", herramienta="Flow", marca="@n", archivo="a.mp4", env=ENV)
+
+
+def test_el_link_lleva_la_plataforma_donde_se_publica():
+    subids = []
+
+    def retag(url, app_id, secret, s):
+        subids.append(s)
+        return "https://s.shopee.com.br/YT42"
+
+    link = link_del_canal(42, "lanny", plataforma="youtube", env=ENV,
+                          buscar_url=lambda *_: "https://shopee.com.br/product/7/42", retag=retag)
+
+    assert link == "https://s.shopee.com.br/YT42"
+    assert subids == [["youtube", "lanny"]]

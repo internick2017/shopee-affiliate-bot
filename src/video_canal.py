@@ -12,8 +12,9 @@ afuera: `registrar_video` busca la URL del producto y genera el shortlink con la
 credenciales del canal, en el momento de registrar. El `link_propio` del offer
 del Paso 1 no se usa para esto.
 
-Los subIds del link son ["video", <canal>], para que el panel de Shopee separe los
-clics que nacen en Shopee Video de los del bot y del sitio.
+Los subIds del link son [<plataforma>, <canal>], para que el panel de Shopee separe
+las ventas por donde nacen: "video" es Shopee Video (el default), "youtube" el canal
+de YouTube, y asi con cada red.
 """
 
 from __future__ import annotations
@@ -59,6 +60,7 @@ def link_del_canal(
     item_id: int,
     canal: str,
     *,
+    plataforma: str = "video",
     env: Mapping[str, str | None] | None = None,
     buscar_url: Callable[[int, str, str], str | None] = _url_del_producto,
     retag: Callable[[str, str, str, list[str]], str | None] = retag_shopee_url,
@@ -70,7 +72,7 @@ def link_del_canal(
     url = buscar_url(item_id, app_id, secret)
     if not url:
         raise RuntimeError(f"Shopee no devuelve el producto {item_id} para la cuenta de {canal}")
-    link = retag(url, app_id, secret, ["video", canal])
+    link = retag(url, app_id, secret, [plataforma, canal])
     if not link:
         raise RuntimeError(f"No pude generar el link de afiliado de {canal} para el producto {item_id}")
     return link
