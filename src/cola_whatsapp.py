@@ -102,7 +102,7 @@ class Envio:
     item_id: int
     titulo: str
     texto: str
-    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto | repetido
+    estado: str = "pendiente"   # pendiente | enviando | enviado | vencido | fallido | sin_foto | repetido
     enviado_ts: float | None = None
 
 
@@ -282,7 +282,9 @@ class ColaStore:
     envio planeado y su estado. Es lo que permite medir en 30 dias que se mando."""
 
     def __init__(self, ruta: str | Path):
-        self._db = sqlite3.connect(str(ruta))
+        # 30 s y no los 5 de sqlite: el bot de ofertas escribe en la misma base y el
+        # 2026-10-29 un "database is locked" al marcar hizo mandar dos veces el mismo post.
+        self._db = sqlite3.connect(str(ruta), timeout=30)
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS envios (fecha TEXT, hora TEXT, rubro TEXT, "
             "item_id INTEGER, titulo TEXT, texto TEXT, estado TEXT, enviado_ts REAL, "
@@ -313,6 +315,12 @@ class ColaStore:
                          (estado, ts, e.fecha, e.hora))
         self._db.commit()
         e.estado, e.enviado_ts = estado, ts
+
+    def ultimo_envio(self, fecha: dt.date) -> float | None:
+        """Cuando salio el ultimo post del dia (epoch), para no mandar dos seguidos."""
+        fila = self._db.execute("SELECT MAX(enviado_ts) FROM envios WHERE fecha = ? AND estado = 'enviado'",
+                                (fecha.isoformat(),)).fetchone()
+        return fila[0] if fila else None
 
     def reemplazar(self, e: Envio, titulo: str, texto: str, item_id: int | None = None) -> None:
         item_id = e.item_id if item_id is None else item_id
@@ -363,7 +371,7 @@ class ColaStore:
         desde = (fecha - dt.timedelta(days=fecha.weekday())).isoformat()
         filas = self._db.execute(
             "SELECT titulo FROM envios WHERE fecha >= ? AND fecha <= ? AND "
-            "(estado = 'enviado' OR (fecha = ? AND estado = 'pendiente' AND hora != ?))",
+            "(estado IN ('enviado', 'enviando') OR (fecha = ? AND estado = 'pendiente' AND hora != ?))",
             (desde, fecha.isoformat(), fecha.isoformat(), salvo_hora or ""))
         return frozenset(_familia(f[0]) for f in filas)
 

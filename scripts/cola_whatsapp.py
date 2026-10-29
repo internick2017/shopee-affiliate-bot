@@ -51,6 +51,9 @@ from src.shopee_resolver import _graphql_call  # noqa: E402
 ESPERA_CANDADO = 10 * 60
 # Cuantas veces se cambia el producto de un horario si la vista previa sale sin foto.
 MAX_REEMPLAZOS = 3
+# Si el ultimo post salio hace menos que esto, se espera a la proxima corrida: un post
+# atrasado y el siguiente salian pegados (2026-10-29: 16:20, 16:25 y 16:30).
+SEPARACION_MINIMA = 12 * 60
 
 
 def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
@@ -133,6 +136,10 @@ def main() -> int:
     if toca is None:
         log.info("Nada para mandar ahora.")
         return 0
+    ultimo = store.ultimo_envio(hoy)
+    if args.enviar and ultimo and time.time() - ultimo < SEPARACION_MINIMA:
+        log.info("Espero para %s: el ultimo post salio hace %d min.", toca.hora, (time.time() - ultimo) // 60)
+        return 0
 
     texto, ml = toca.texto, None
     if toca.rubro == "ml":
@@ -145,6 +152,10 @@ def main() -> int:
     candado = tomar_celular(log)
     if candado is None:
         return 0
+    if args.enviar:
+        # "enviando" no lo vuelve a elegir `a_enviar`: si la corrida se cae despues de
+        # mandar, no sale dos veces. Lo que no llego a mandarse vuelve a "pendiente".
+        store.marcar(toca, "enviando")
     pasos = Pasos(RAIZ / "logs" / "cola_whatsapp" / time.strftime("%Y%m%d-%H%M%S"))
     app, sec = os.getenv("SHOPEE_APP_ID", ""), os.getenv("SHOPEE_SECRET", "")
     hooks = HookBank.from_file(RAIZ / "hooks.txt")
@@ -185,6 +196,8 @@ def main() -> int:
                 log.info("Cambio %s por %s", toca.hora, idea.titulo)
     except CelularNoDisponible as exc:
         log.info("No mando %s todavia: %s. Pruebo en la proxima corrida.", toca.hora, exc)
+        if args.enviar:
+            store.marcar(toca, "pendiente")
         return 0
     except SinFoto as exc:
         log.warning("Salteo %s %s: %s", toca.hora, toca.titulo, exc)
@@ -199,6 +212,8 @@ def main() -> int:
     except Exception:
         # Celular desconectado, ADB caido: el post queda pendiente para la proxima.
         log.exception("No pude manejar el celular para %s", toca.hora)
+        if args.enviar:
+            store.marcar(toca, "pendiente")
         return 1
     if args.enviar:
         if ml is not None:

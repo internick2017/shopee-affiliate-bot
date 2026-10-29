@@ -243,3 +243,18 @@ def test_familia_junta_sapateiras_y_sacos_de_roupa_del_2026_10_29():
         familia("Kit 3 Saco Organizador Capa Protetora Multiuso Rouparia Roupas Cobertor")
     assert familia("Cesto De Roupa 40x70 Caixa Dobrável") != familia("Kit 3 Saco Organizador Roupas")
     assert familia("Prateleira de canto para banheiro") != familia("Sapateira 9 andares")
+
+
+def test_enviando_no_se_vuelve_a_mandar_y_ultimo_envio(tmp_path):
+    # 2026-10-29: la corrida se cayo al marcar "enviado" y la siguiente mando el mismo post.
+    store = ColaStore(tmp_path / "c.db")
+    hoy = dt.date(2026, 10, 29)
+    a = Envio("2026-10-29", "16:05", "hogar", 1, "Cesto", "t1")
+    b = Envio("2026-10-29", "16:30", "hogar", 2, "Espuma", "t2")
+    store.guardar([a, b])
+    store.marcar(a, "enviando")
+    toca, _ = a_enviar(store.del_dia(hoy), dt.datetime(2026, 10, 29, 16, 25))
+    assert toca is None
+    assert store.ultimo_envio(hoy) is None
+    store.marcar(b, "enviado")
+    assert store.ultimo_envio(hoy) is not None
