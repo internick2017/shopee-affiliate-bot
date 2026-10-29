@@ -53,7 +53,8 @@ from src.youtube_lanny import (  # noqa: E402
     titulo,
 )
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stdout is not None:  # con pythonw (tarea programada) no hay consola
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 HOME_OFFICE_ENV = Path(r"E:\dev\01-web-apps\home-office-br\.env")
 REDIRECT = "http://localhost:8080"  # el mismo que tiene registrado la app de Setup Justo
 
@@ -77,6 +78,7 @@ def _video(store: VideosStore, item_id: int):
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--db", help="ruta de grabados.db (default: GRABADOS_DB o la del repo)")
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("autorizar")
     a.add_argument("codigo", nargs="?")
@@ -89,6 +91,7 @@ def main() -> int:
                                      "publicados en Shopee Video")
     lo.add_argument("--atrasados", type=int, default=5)
     lo.add_argument("--simular", action="store_true", help="solo lista, no toca YouTube")
+    lo.add_argument("--log", help="agrega la salida a este archivo (para la tarea programada)")
     pu = sub.add_parser("publico")
     pu.add_argument("item_id", type=int)
     c = sub.add_parser("comentar", help="YouTube no deja comentar un video privado: "
@@ -102,8 +105,15 @@ def main() -> int:
     r.add_argument("link")
     args = p.parse_args()
 
+    if getattr(args, "log", None):
+        # La tarea corre con pythonw, sin consola: todo, avisos incluidos, va al archivo.
+        Path(args.log).parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8")  # noqa: SIM115
+        print(f"\n=== {time.strftime('%Y-%m-%d %H:%M')} ===")
     load_dotenv(BOT / ".env")
-    db = os.getenv("GRABADOS_DB") or str(BOT / "grabados.db")
+    db = args.db or os.getenv("GRABADOS_DB") or str(BOT / "grabados.db")
+    # Las claves de Shopee viven con la base, aunque el script corra desde un worktree.
+    load_dotenv(Path(db).parent / ".env")
     pubs = PublicacionesStore(db)
     # Los mp4 viven al lado de la base, aunque el script corra desde otro worktree.
     entregados = Path(db).parent / "videos_entregados" / "shopee-video-flow"
@@ -184,6 +194,7 @@ def main() -> int:
             args.atrasados, time.time())
         print(f"{len(lista)} para subir hoy")
         subidos = fallidos = 0
+        tope = False
         for i, v in enumerate(lista):
             if args.simular:
                 print(f"  {v.item_id:>12}  {titulo(v)}")
@@ -198,6 +209,7 @@ def main() -> int:
                     # Casi siempre es el tope diario del canal (medido 2026-10-29: corto
                     # al noveno). Seguir solo gasta intentos: el resto queda para manana.
                     print("  Freno el lote: YouTube no acepta mas subidas por hoy.")
+                    tope = True
                     break
                 continue
             subidos += 1
@@ -208,7 +220,8 @@ def main() -> int:
         if not args.simular:
             print(f"Listo: {subidos} subidos, {fallidos} salteados, "
                   f"{len(lista) - subidos - fallidos} quedan para manana")
-        return 1 if fallidos else 0
+        # Llegar al tope diario es lo normal, no una falla de la tarea.
+        return 1 if fallidos - tope else 0
 
     video = resolver_archivo(_video(videos, args.item_id), entregados)
 
