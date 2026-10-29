@@ -1,12 +1,18 @@
 """La parte de la cola de WhatsApp que decide, sin celular ni API."""
 
 import datetime as dt
+import random
 from decimal import Decimal
 
-import random
-
 from src.cola_whatsapp import (
-    ColaStore, Envio, a_enviar, armar_cola, corrida, en_uso, plan_del_dia, texto_del_post,
+    ColaStore,
+    Envio,
+    a_enviar,
+    armar_cola,
+    corrida,
+    en_uso,
+    plan_del_dia,
+    texto_del_post,
 )
 from src.post_builder import HookBank
 from src.product_ideas import Idea
@@ -30,10 +36,10 @@ def buscador(pozos):
 def test_plan_lunes_a_sabado_dos_por_hora_ochenta_por_ciento_hogar():
     plan = plan_del_dia(MIERCOLES)
     assert [h for h, _ in plan][:3] == ["08:00", "08:30", "09:00"]
-    assert plan[-1][0] == "21:30"
-    assert len(plan) == 28
+    assert plan[-1][0] == "20:30"
+    assert len(plan) == 26
     rubro = [r for _, r in plan if r not in ("hogar", "ml")]
-    assert len(rubro) == 6
+    assert len(rubro) == 5  # 20 % de 26
     assert sum(r == "ml" for _, r in plan) == 3  # 10 % Mercado Livre
     assert set(rubro) <= {"celular", "audio", "informatica"}  # miercoles: electronicos
 
@@ -105,9 +111,9 @@ def test_la_hora_se_corre_al_azar_sin_juntar_dos_posts():
     azar = random.Random(1)
     horas = [corrida(h, azar) for h, _ in plan_del_dia(MIERCOLES)]
     minutos = [int(h[:2]) * 60 + int(h[3:]) for h in horas]
-    assert all(b - a >= 15 for a, b in zip(minutos, minutos[1:]))
+    assert all(b - a >= 15 for a, b in zip(minutos, minutos[1:], strict=False))
     assert any(m % 30 for m in minutos)  # no todas en punto ni y media
-    assert horas[0] >= "08:00" and horas[-1] <= "21:45"
+    assert horas[0] >= "08:00" and horas[-1] <= "20:45"
 
 
 def test_en_uso_si_lo_tocaron_hace_menos_de_tres_minutos():
