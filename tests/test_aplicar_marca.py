@@ -11,6 +11,11 @@ def test_sin_foto_solo_la_marca_abajo_a_la_derecha():
     assert "[2:v]" not in f and "overlay=W-w-" in f
 
 
+def test_siempre_sale_en_1080x1920():
+    for con_foto in (False, True):
+        assert filtro(con_foto).startswith("[0:v]scale=1080:1920")
+
+
 def test_con_foto_va_arriba_a_la_izquierda_y_la_marca_sigue_abajo():
     f = filtro(True)
     assert "[2:v]" in f
