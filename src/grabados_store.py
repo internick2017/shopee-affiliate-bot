@@ -344,3 +344,67 @@ class VideosStore:
         else:
             fila = self._conn.execute("SELECT COUNT(*) FROM videos_producidos").fetchone()
         return int(fila[0])
+
+
+class PublicacionesStore:
+    """Donde salio cada video producido fuera de Shopee Video (YouTube, por ahora).
+
+    Una fila por (item_id, canal, plataforma): el mismo video de Lanny puede estar
+    en Shopee Video, en YouTube y en otra red, cada una con su id y su link. Sirve
+    para no subir dos veces lo mismo y para rescatar un video que subio pero no se
+    guardo (`registrar` con el id que imprimio la subida).
+
+    El refresh token de cada canal vive aca tambien, en `credencial`: la base ya
+    esta fuera de git (`*.db` en `.gitignore`) y nunca pasa por el `.env`. Ese token
+    sube, edita y borra videos del canal: vale como una contrasena.
+    """
+
+    def __init__(self, db_path: str | Path):
+        self._conn = sqlite3.connect(str(db_path))
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS publicaciones ("
+            "item_id INTEGER NOT NULL, canal TEXT NOT NULL, plataforma TEXT NOT NULL, "
+            "id_externo TEXT NOT NULL, link TEXT, ts REAL NOT NULL, "
+            "PRIMARY KEY (item_id, canal, plataforma))"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS credencial (nombre TEXT PRIMARY KEY, valor TEXT NOT NULL)"
+        )
+        self._conn.commit()
+
+    def registrar(self, item_id: int, *, canal: str, plataforma: str, id_externo: str,
+                  link: str = "", now: float | None = None) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO publicaciones VALUES (?, ?, ?, ?, ?, ?)",
+            (int(item_id), canal, plataforma, id_externo, link,
+             time.time() if now is None else now),
+        )
+        self._conn.commit()
+
+    def id_externo(self, item_id: int, canal: str, plataforma: str) -> str | None:
+        fila = self._conn.execute(
+            "SELECT id_externo FROM publicaciones WHERE item_id = ? AND canal = ? AND plataforma = ?",
+            (int(item_id), canal, plataforma),
+        ).fetchone()
+        return fila[0] if fila else None
+
+    def link_publicado(self, item_id: int, canal: str, plataforma: str) -> str | None:
+        fila = self._conn.execute(
+            "SELECT link FROM publicaciones WHERE item_id = ? AND canal = ? AND plataforma = ?",
+            (int(item_id), canal, plataforma),
+        ).fetchone()
+        return fila[0] if fila else None
+
+    def ids_publicados(self, canal: str, plataforma: str) -> set[int]:
+        return {int(f[0]) for f in self._conn.execute(
+            "SELECT item_id FROM publicaciones WHERE canal = ? AND plataforma = ?",
+            (canal, plataforma))}
+
+    def guardar_credencial(self, nombre: str, valor: str) -> None:
+        self._conn.execute("INSERT OR REPLACE INTO credencial VALUES (?, ?)", (nombre, valor))
+        self._conn.commit()
+
+    def credencial(self, nombre: str) -> str | None:
+        fila = self._conn.execute(
+            "SELECT valor FROM credencial WHERE nombre = ?", (nombre,)).fetchone()
+        return fila[0] if fila else None

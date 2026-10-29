@@ -1,0 +1,253 @@
+"""Sube los videos de Lanny a su canal de YouTube ("Lanny Herrera") por la API.
+
+Uso:
+    python scripts/youtube_lanny.py autorizar              # imprime el enlace (una sola vez)
+    python scripts/youtube_lanny.py autorizar <codigo>     # guarda el permiso del canal
+    python scripts/youtube_lanny.py pendientes             # videos de Lanny que faltan en YouTube
+    python scripts/youtube_lanny.py subir <item_id> --simular   # muestra titulo, texto y link
+    python scripts/youtube_lanny.py subir <item_id> [--privado] # sube, guarda y comenta el link
+    python scripts/youtube_lanny.py lote [--atrasados 5] [--simular]  # los nuevos + 5 atrasados
+    python scripts/youtube_lanny.py descartar <item_id>   # no subirlo nunca (video infiel, removido, etc.)
+    python scripts/youtube_lanny.py comentar <item_id>    # el link como comentario (video ya publico)
+    python scripts/youtube_lanny.py publico <item_id>     # pasa a publico uno subido con --privado y lo comenta
+    python scripts/youtube_lanny.py rescatar <item_id> <video_id> <link>  # subio pero no guardo
+
+Autorizar: abrir el enlace en el Chrome donde esta la sesion de herreralanny@gmail.com,
+elegir esa cuenta, aceptar, y copiar el `code=` de la URL a la que vuelve (localhost no
+carga, es normal). El codigo vence en minutos y sirve una sola vez.
+
+La app OAuth es la de Setup Justo (proyecto `setup-justo`, decision de Nick 2026-10-29):
+`YOUTUBE_CLIENT_ID` y `YOUTUBE_CLIENT_SECRET` se leen del `.env` del bot y, si no estan,
+del `.env` de home-office-br, para no duplicar el secreto.
+"""
+
+from __future__ import annotations
+
+import argparse
+import io
+import os
+import sys
+import time
+from pathlib import Path
+
+BOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BOT))
+
+from dotenv import dotenv_values, load_dotenv  # noqa: E402
+
+from src import canal_youtube  # noqa: E402
+from src.grabados_store import PublicacionesStore, VideosStore  # noqa: E402
+from src.video_canal import link_del_canal  # noqa: E402
+from src.youtube_lanny import (  # noqa: E402
+    CANAL,
+    DESCARTADO,
+    PLATAFORMA,
+    TOKEN,
+    NoSePublico,
+    comentario,
+    descripcion,
+    elegir_lote,
+    pendientes,
+    publicar,
+    resolver_archivo,
+    titulo,
+)
+
+if sys.stdout is not None:  # con pythonw (tarea programada) no hay consola
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+HOME_OFFICE_ENV = Path(r"E:\dev\01-web-apps\home-office-br\.env")
+REDIRECT = "http://localhost:8080"  # el mismo que tiene registrado la app de Setup Justo
+
+
+def _cliente_oauth() -> tuple[str, str]:
+    otro = dotenv_values(HOME_OFFICE_ENV) if HOME_OFFICE_ENV.is_file() else {}
+    cid = os.getenv("YOUTUBE_CLIENT_ID") or otro.get("YOUTUBE_CLIENT_ID")
+    sec = os.getenv("YOUTUBE_CLIENT_SECRET") or otro.get("YOUTUBE_CLIENT_SECRET")
+    if not cid or not sec:
+        sys.exit("Faltan YOUTUBE_CLIENT_ID y YOUTUBE_CLIENT_SECRET (.env del bot o de home-office-br)")
+    return cid, sec
+
+
+def _video(store: VideosStore, item_id: int):
+    for v in store.listar(canal=CANAL, cuantos=1000):
+        if v.item_id == item_id:
+            return v
+    sys.exit(f"No hay video de {CANAL} con item_id {item_id} en videos_producidos")
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--db", help="ruta de grabados.db (default: GRABADOS_DB o la del repo)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("autorizar")
+    a.add_argument("codigo", nargs="?")
+    sub.add_parser("pendientes")
+    s = sub.add_parser("subir")
+    s.add_argument("item_id", type=int)
+    s.add_argument("--privado", action="store_true")
+    s.add_argument("--simular", action="store_true", help="no toca YouTube")
+    lo = sub.add_parser("lote", help="todos los nuevos (menos de 2 dias) y N atrasados ya "
+                                     "publicados en Shopee Video")
+    lo.add_argument("--atrasados", type=int, default=5)
+    lo.add_argument("--simular", action="store_true", help="solo lista, no toca YouTube")
+    lo.add_argument("--log", help="agrega la salida a este archivo (para la tarea programada)")
+    pu = sub.add_parser("publico")
+    pu.add_argument("item_id", type=int)
+    c = sub.add_parser("comentar", help="YouTube no deja comentar un video privado: "
+                                          "correr esto despues de pasarlo a publico")
+    c.add_argument("item_id", type=int)
+    de = sub.add_parser("descartar")
+    de.add_argument("item_id", type=int)
+    r = sub.add_parser("rescatar")
+    r.add_argument("item_id", type=int)
+    r.add_argument("video_id")
+    r.add_argument("link")
+    args = p.parse_args()
+
+    if getattr(args, "log", None):
+        # La tarea corre con pythonw, sin consola: todo, avisos incluidos, va al archivo.
+        Path(args.log).parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8")  # noqa: SIM115
+        print(f"\n=== {time.strftime('%Y-%m-%d %H:%M')} ===")
+    load_dotenv(BOT / ".env")
+    db = args.db or os.getenv("GRABADOS_DB") or str(BOT / "grabados.db")
+    # Las claves de Shopee viven con la base, aunque el script corra desde un worktree.
+    load_dotenv(Path(db).parent / ".env")
+    pubs = PublicacionesStore(db)
+    # Los mp4 viven al lado de la base, aunque el script corra desde otro worktree.
+    entregados = Path(db).parent / "videos_entregados" / "shopee-video-flow"
+
+    if args.cmd == "autorizar":
+        cid, sec = _cliente_oauth()
+        if not args.codigo:
+            print("Abri este enlace con la cuenta de Lanny y volve con el code= de la URL:\n")
+            print(canal_youtube.url_de_autorizacion(cid, REDIRECT))
+            print("\nDespues: python scripts/youtube_lanny.py autorizar <codigo>")
+            return 0
+        tokens = canal_youtube.autorizar(args.codigo, cid, sec, REDIRECT)
+        if not tokens:
+            sys.exit("Google rechazo el codigo. Suele estar vencido: pedi uno nuevo.")
+        pubs.guardar_credencial(TOKEN, tokens[1])
+        print("Canal autorizado.")
+        return 0
+
+    if args.cmd == "descartar":
+        if pubs.id_externo(args.item_id, CANAL, PLATAFORMA) not in (None, DESCARTADO):
+            sys.exit("Ya esta subido: borralo en Studio y despues sacale el registro")
+        pubs.registrar(args.item_id, canal=CANAL, plataforma=PLATAFORMA, id_externo=DESCARTADO)
+        print(f"{args.item_id} descartado: no se ofrece mas para YouTube")
+        return 0
+
+    if args.cmd == "rescatar":
+        pubs.registrar(args.item_id, canal=CANAL, plataforma=PLATAFORMA,
+                       id_externo=args.video_id, link=args.link)
+        print(f"Guardado: {args.item_id} = https://youtube.com/shorts/{args.video_id}")
+        return 0
+
+    if args.cmd in ("comentar", "publico"):
+        vid = pubs.id_externo(args.item_id, CANAL, PLATAFORMA)
+        if not vid:
+            sys.exit(f"{args.item_id} no esta en YouTube todavia")
+        cid, sec = _cliente_oauth()
+        refresh = pubs.credencial(TOKEN)
+        token = refresh and canal_youtube.renovar_token(refresh, cid, sec)
+        if not token:
+            sys.exit("No se pudo renovar el acceso: corre 'autorizar'")
+        if args.cmd == "publico":
+            if not canal_youtube.hacer_publico(vid, token):
+                sys.exit("YouTube rechazo el cambio a publico")
+            print(f"Publico: https://youtube.com/shorts/{vid}")
+        ok = canal_youtube.comentar(vid, comentario(pubs.link_publicado(args.item_id, CANAL, PLATAFORMA)),
+                                    token)
+        print("Comentario listo (fijarlo a mano en Studio)" if ok
+              else "Fallo el comentario: el video sigue privado?")
+        return 0 if ok else 1
+
+    videos = VideosStore(db)
+    if args.cmd == "pendientes":
+        lista = pendientes([resolver_archivo(v, entregados)
+                            for v in videos.listar(canal=CANAL, cuantos=1000)],
+                           pubs.ids_publicados(CANAL, PLATAFORMA))
+        for v in lista:
+            visto = "visto" if v.fidelidad_ts else "     "
+            print(f"{v.item_id:>12}  {visto}  {Path(v.archivo).name:<40} {titulo(v)}")
+        print(f"\n{len(lista)} pendientes")
+        return 0
+
+    def generar_link(item_id: int) -> str:
+        return link_del_canal(item_id, CANAL, plataforma=PLATAFORMA)
+
+    cid, sec = _cliente_oauth()
+
+    def access_token() -> str | None:
+        refresh = pubs.credencial(TOKEN)
+        if not refresh:
+            sys.exit("El canal no esta autorizado: corre 'autorizar'")
+        return canal_youtube.renovar_token(refresh, cid, sec)
+
+    if args.cmd == "lote":
+        lista = elegir_lote(
+            pendientes([resolver_archivo(v, entregados)
+                        for v in videos.listar(canal=CANAL, cuantos=1000)],
+                       pubs.ids_publicados(CANAL, PLATAFORMA)),
+            args.atrasados, time.time())
+        print(f"{len(lista)} para subir hoy")
+        subidos = fallidos = 0
+        tope = False
+        for i, v in enumerate(lista):
+            if args.simular:
+                print(f"  {v.item_id:>12}  {titulo(v)}")
+                continue
+            try:
+                res = publicar(v, pubs, generar_link=generar_link, access_token=access_token,
+                               subir=canal_youtube.subir_short, comentar=canal_youtube.comentar)
+            except NoSePublico as exc:
+                fallidos += 1
+                print(f"  SALTEADO {v.item_id}: {exc}")
+                if "La subida fallo" in str(exc):
+                    # Casi siempre es el tope diario del canal (medido 2026-10-29: corto
+                    # al noveno). Seguir solo gasta intentos: el resto queda para manana.
+                    print("  Freno el lote: YouTube no acepta mas subidas por hoy.")
+                    tope = True
+                    break
+                continue
+            subidos += 1
+            print(f"  {v.item_id:>12}  https://youtube.com/shorts/{res.video_id}"
+                  + ("" if res.comentado else "  (sin comentario: correr 'comentar')"))
+            if i < len(lista) - 1:
+                time.sleep(20)  # no subir todo de un tiron
+        if not args.simular:
+            print(f"Listo: {subidos} subidos, {fallidos} salteados, "
+                  f"{len(lista) - subidos - fallidos} quedan para manana")
+        # Llegar al tope diario es lo normal, no una falla de la tarea.
+        return 1 if fallidos - tope else 0
+
+    video = resolver_archivo(_video(videos, args.item_id), entregados)
+
+    if args.simular:
+        link = generar_link(video.item_id)
+        print(f"Archivo: {video.archivo}\nTitulo: {titulo(video)}\n")
+        print(f"Descripcion:\n{descripcion(video, link)}\n\nComentario: {comentario(link)}")
+        return 0
+
+    try:
+        res = publicar(video, pubs, generar_link=generar_link, access_token=access_token,
+                       subir=canal_youtube.subir_short, comentar=canal_youtube.comentar,
+                       privado=args.privado)
+    except NoSePublico as exc:
+        sys.exit(f"No se publico: {exc}")
+    print(f"Subido{' (privado)' if args.privado else ''}: https://youtube.com/shorts/{res.video_id}")
+    print(f"Link: {res.link}")
+    if res.comentado:
+        print("Comentario con el link: listo (fijarlo a mano en Studio)")
+    elif args.privado:
+        print(f"Comentario: YouTube no deja comentar un video privado. Para pasarlo a publico "
+              f"y comentarlo: python scripts/youtube_lanny.py publico {video.item_id}")
+    else:
+        print(f"Comentario: FALLO. Reintentar con: python scripts/youtube_lanny.py comentar {video.item_id}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
