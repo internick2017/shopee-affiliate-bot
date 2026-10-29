@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .canal_youtube import CATEGORIA_ESTILO
 from .grabados_store import PublicacionesStore, VideoProducido
+from .video_duracion import problema_del_archivo
 
 CANAL = "lanny"
 PLATAFORMA = "youtube"
@@ -87,12 +88,16 @@ def publicar(
     subir: Callable[..., str | None],
     comentar: Callable[[str, str, str], bool],
     privado: bool = False,
+    revisar: Callable[[str], str | None] = problema_del_archivo,
 ) -> Resultado:
     ya = store.id_externo(video.item_id, CANAL, PLATAFORMA)
     if ya:
         raise NoSePublico(f"Ya esta en YouTube: https://youtube.com/shorts/{ya}")
     if not video.archivo or not Path(video.archivo).is_file():
         raise NoSePublico(f"No encuentro el archivo: {video.archivo or '(vacio)'}")
+    motivo = revisar(video.archivo)
+    if motivo:
+        raise NoSePublico(f"El video esta mal ({motivo}): hay que rehacerlo")
 
     link = generar_link(video.item_id)
     token = access_token()

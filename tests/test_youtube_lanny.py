@@ -62,7 +62,8 @@ def test_publicar_sube_guarda_y_comenta(store, mp4):
         return True
 
     r = publicar(video(mp4), store, generar_link=lambda item: f"https://s.shopee.com.br/YT{item}",
-                 access_token=lambda: "tok", subir=subir, comentar=comentar, privado=True)
+                 access_token=lambda: "tok", subir=subir, comentar=comentar, privado=True,
+                 revisar=lambda _: None)
 
     assert (r.video_id, r.link, r.comentado) == ("VID1", "https://s.shopee.com.br/YT58", True)
     assert llamadas["subir"] == (mp4, "tok", True, CATEGORIA_ESTILO)
@@ -82,7 +83,7 @@ def test_no_sube_dos_veces(store, mp4):
 def test_si_la_subida_falla_no_guarda_nada(store, mp4):
     with pytest.raises(NoSePublico, match="fallo"):
         publicar(video(mp4), store, generar_link=lambda _: "x", access_token=lambda: "t",
-                 subir=lambda *a, **k: None, comentar=lambda *a: True)
+                 subir=lambda *a, **k: None, comentar=lambda *a: True, revisar=lambda _: None)
     assert store.ids_publicados("lanny", "youtube") == set()
 
 
@@ -108,3 +109,10 @@ def test_credencial_se_guarda_y_se_lee(store):
 def test_archivo_guardado_sin_carpeta_se_busca_en_entregados(tmp_path, mp4):
     assert resolver_archivo(video("espuma_lanny.mp4"), tmp_path).archivo == mp4
     assert resolver_archivo(video("otro.mp4"), tmp_path).archivo == "otro.mp4"
+
+
+def test_video_con_imagen_cortada_no_se_sube(store, mp4):
+    with pytest.raises(NoSePublico, match="rehacerlo"):
+        publicar(video(mp4), store, generar_link=lambda _: pytest.fail("no"),
+                 access_token=lambda: "t", subir=lambda *a, **k: pytest.fail("no"),
+                 comentar=lambda *a: True, revisar=lambda _: "la imagen termina antes")
