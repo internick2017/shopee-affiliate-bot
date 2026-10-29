@@ -12,6 +12,8 @@ from src.cola_whatsapp import (
     corrida,
     en_uso,
     plan_del_dia,
+    reemplazo,
+    sirve,
     texto_del_post,
 )
 from src.post_builder import HookBank
@@ -36,10 +38,10 @@ def buscador(pozos):
 def test_plan_lunes_a_sabado_dos_por_hora_ochenta_por_ciento_hogar():
     plan = plan_del_dia(MIERCOLES)
     assert [h for h, _ in plan][:3] == ["08:00", "08:30", "09:00"]
-    assert plan[-1][0] == "21:30"
-    assert len(plan) == 28
+    assert plan[-1][0] == "20:30"
+    assert len(plan) == 26
     rubro = [r for _, r in plan if r not in ("hogar", "ml")]
-    assert len(rubro) == 6
+    assert len(rubro) == 5  # 20 % de 26
     assert sum(r == "ml" for _, r in plan) == 3  # 10 % Mercado Livre
     assert set(rubro) <= {"celular", "audio", "informatica"}  # miercoles: electronicos
 
@@ -113,7 +115,7 @@ def test_la_hora_se_corre_al_azar_sin_juntar_dos_posts():
     minutos = [int(h[:2]) * 60 + int(h[3:]) for h in horas]
     assert all(b - a >= 15 for a, b in zip(minutos, minutos[1:], strict=False))
     assert any(m % 30 for m in minutos)  # no todas en punto ni y media
-    assert horas[0] >= "08:00" and horas[-1] <= "21:45"
+    assert horas[0] >= "08:00" and horas[-1] <= "20:45"
 
 
 def test_en_uso_si_lo_tocaron_hace_menos_de_tres_minutos():
@@ -147,3 +149,129 @@ def test_ml_mandado_la_semana_pasada_vuelve(tmp_path):
     store.agregar_ml(POST_ML, ahora=lunes.timestamp() - 100)
     store._db.execute("UPDATE ml_candidatos SET enviado_ts = ?", (lunes.timestamp() - 3 * 86400,))
     assert store.candidato_ml(lunes)[0] == "MLB123"
+
+
+def test_reemplazo_da_otro_del_mismo_rubro_y_nunca_uno_ya_probado(tmp_path):
+    pozos = {"casa": [idea(1, "Pote hermetico"), idea(2, "Tapete banheiro"),
+                      idea(3, "Creatina", categorias=(999, 1))]}
+    r = reemplazo("hogar", MIERCOLES, buscador(pozos), HookBank(["OI"]), excluir={1})
+    assert r[0].item_id == 2  # el 1 ya se probo; el 3 no es de Casa e Cozinha
+    assert reemplazo("hogar", MIERCOLES, buscador(pozos), HookBank(["OI"]), excluir={1, 2}) is None
+
+
+def test_store_reemplazar_cambia_el_producto_del_horario(tmp_path):
+    store = ColaStore(tmp_path / "c.db")
+    e = Envio("2026-10-28", "13:34", "hogar", 1, "Caneta", "texto")
+    store.guardar([e])
+    store.reemplazar(e, "Pote", "texto nuevo", 2)
+    fila = store.del_dia(dt.date(2026, 10, 28))[0]
+    assert (fila.item_id, fila.titulo, fila.estado) == (2, "Pote", "pendiente")
+
+
+def test_es_hogar_ml_descarta_suplementos_con_pote_en_el_titulo():
+    from src.cola_whatsapp import es_hogar_ml
+
+    assert not es_hogar_ml("03 POTES do PRÓPOLIS VERDE com 1000mg por Dose - Extrato")
+    assert es_hogar_ml("Kit 10 Potes Herméticos Cozinha")
+
+
+def test_familia_agrupa_titulos_que_la_primera_palabra_no_junta():
+    from src.cola_whatsapp import _familia
+    assert len({_familia(t) for t in (
+        "Percarbonato 100% Puro Tira Manchas", "Maciez Tira manchas alvejantex 1kg + Percarbonatox",
+        "Kit Percarbonato Calisul 1kg")}) == 1
+    assert len({_familia(t) for t in (
+        "Kit 10 Pote Hermético Empilháveis", "Kit 12 Marmitas Potes 800ml", "Kit 5 Tigelas de Vidro Herméticas")}) == 1
+    assert _familia("Protetor Impermeável para Colchão") == _familia("Capa Protetora Colchão Box")
+    assert _familia("Potente Liquidificador") != _familia("Kit 10 Pote Hermético")
+
+
+def test_un_tipo_no_se_repite_en_el_dia_ni_si_viene_de_la_semana():
+    hogar = [idea(1, "Percarbonato Puro"), idea(2, "Maciez Tira manchas Percarbonatox"),
+             idea(3, "Kit 12 Marmitas Potes"), idea(4, "Kit 5 Tigelas Herméticas"),
+             idea(5, "Tapete banheiro"), idea(6, "Cortina voil")]
+    pozos = {b: hogar for b in ("casa", "organizador cozinha", "utensilios cozinha", "limpeza",
+                                "banheiro", "decoracao casa", "lavanderia", "potes",
+                                "cama mesa banho", "organizador")}
+    from src.cola_whatsapp import _familia
+    cola = armar_cola(MIERCOLES, buscador(pozos), HookBank(["OI"]), excluir=set(),
+                      excluir_familias=frozenset({_familia("Tapete banheiro")}))
+    fam = [_familia(e.titulo) for e in cola]
+    assert len(fam) == len(set(fam))
+    assert _familia("Tapete banheiro") not in fam
+
+
+def test_familias_de_la_semana_cuenta_enviados_y_pendientes_de_hoy(tmp_path):
+    from src.cola_whatsapp import _familia
+    st = ColaStore(tmp_path / "c.db")
+    st.guardar([Envio("2026-10-28", "08:00", "hogar", 1, "Percarbonato Puro", "t", "enviado"),
+                Envio("2026-10-28", "09:00", "hogar", 2, "Kit Marmitas Potes", "t", "pendiente"),
+                Envio("2026-10-28", "10:00", "hogar", 3, "Fone Bluetooth", "t", "vencido")])
+    assert st.familias_de_la_semana(MIERCOLES) == {_familia("Percarbonato"), _familia("Potes")}
+    assert st.familias_de_la_semana(MIERCOLES, salvo_hora="09:00") == {_familia("Percarbonato")}
+
+
+def test_cruzar_marca_el_tipo_ya_hecho_en_7_dias_y_dentro_del_lote():
+    import time
+
+    from src.familias import cruzar
+    ahora = time.time()
+    hist = [(ahora - 86400, "Kit Limpador Pastilha de máquina de lavar roupa", "video lanny"),
+            (ahora - 20 * 86400, "Cortina voil", "video lanny")]
+    r = dict(cruzar(["Tanquinho Colormaq 15kg", "Cortina voil nova", "Escova elétrica", "Mangueiras Tanquinho"],
+                    hist, ahora))
+    assert r["Tanquinho Colormaq 15kg"] and r["Mangueiras Tanquinho"]
+    assert any("este mismo lote" in c for c in r["Mangueiras Tanquinho"])
+    assert not r["Cortina voil nova"] and not r["Escova elétrica"]
+
+
+def test_hogar_descarta_productos_de_auto_cargados_en_casa_e_cozinha():
+    # 2026-10-29 12:39: un conector de inflador de pneus salio como post de hogar.
+    auto = idea(1, "KOOL Auto Todo O Conector Do Inflador Pneus Compressor Ar Mandril Metal")
+    assert not sirve("hogar", auto)
+    assert not sirve("ml", idea(2, "Suporte veicular para celular"))
+    assert sirve("hogar", idea(3, "Espuma Spray Zip Clean Limpa a Seco Sofa, Estofado, Banco de Carro"))
+    assert sirve("infantil", idea(4, "Carro de controle remoto", categorias=(1, 2, 3)))
+
+
+def test_familia_junta_sapateiras_y_sacos_de_roupa_del_2026_10_29():
+    # Salieron dos veces el mismo dia en el grupo: la primera palabra no los juntaba.
+    from src.familias import familia
+    assert familia("Sapateira Organizadora com 9 Prateleiras para Organizar Sapatos") == \
+        familia("Prateleira Sapateira 9 Andares De Metal E Plastico Organizador Multiuso")
+    assert familia("Kit 05 Embalagens PVC Organizadora Roupa, Cama, Mesa e Banho Armário") == \
+        familia("Kit 3 Saco Organizador Capa Protetora Multiuso Rouparia Roupas Cobertor")
+    assert familia("Cesto De Roupa 40x70 Caixa Dobrável") != familia("Kit 3 Saco Organizador Roupas")
+    assert familia("Prateleira de canto para banheiro") != familia("Sapateira 9 andares")
+
+
+def test_enviando_no_se_vuelve_a_mandar_y_ultimo_envio(tmp_path):
+    # 2026-10-29: la corrida se cayo al marcar "enviado" y la siguiente mando el mismo post.
+    store = ColaStore(tmp_path / "c.db")
+    hoy = dt.date(2026, 10, 29)
+    a = Envio("2026-10-29", "16:05", "hogar", 1, "Cesto", "t1")
+    b = Envio("2026-10-29", "16:30", "hogar", 2, "Espuma", "t2")
+    store.guardar([a, b])
+    store.marcar(a, "enviando")
+    toca, _ = a_enviar(store.del_dia(hoy), dt.datetime(2026, 10, 29, 16, 25))
+    assert toca is None
+    assert store.ultimo_envio(hoy) is None
+    store.marcar(b, "enviado")
+    assert store.ultimo_envio(hoy) is not None
+
+
+def test_falta_leyenda_si_el_link_no_aparece_en_el_chat():
+    # 2026-10-29 17:15: la foto llego al grupo sin leyenda ni link.
+    from unittest.mock import MagicMock
+
+    from src.cola_whatsapp import WhatsApp
+
+    d = MagicMock()
+    wa = WhatsApp(d, MagicMock())
+    texto = "Kit camisas\nCompre aqui: https://s.shopee.com.br/1W0KWecbKO"
+    d.return_value.wait.return_value = False
+    assert wa.falta_leyenda(texto)
+    d.assert_called_with(textContains="https://s.shopee.com.br/1W0KWecbKO")
+    d.return_value.wait.return_value = True
+    assert not wa.falta_leyenda(texto)
+    assert not wa.falta_leyenda("sin link")
