@@ -37,6 +37,7 @@ from src.cola_whatsapp import (  # noqa: E402
     WhatsApp,
     a_enviar,
     armar_cola,
+    reemplazo,
 )
 from src.logging_setup import configurar_logging  # noqa: E402
 from src.post_builder import HookBank  # noqa: E402
@@ -46,6 +47,8 @@ from src.publicador_celular import Pasos  # noqa: E402
 # Cuanto esperar el celular si lo tiene el publicador de Shopee Video: una
 # publicacion tarda unos 2 minutos.
 ESPERA_CANDADO = 10 * 60
+# Cuantas veces se cambia el producto de un horario si la vista previa sale sin foto.
+MAX_REEMPLAZOS = 3
 
 
 def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
@@ -60,6 +63,7 @@ def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
         lambda b, excluir: buscar_ideas(b, app, sec, cuantas=50, candidatos=50, excluir=excluir),
         HookBank.from_file(RAIZ / "hooks.txt"),
         excluir=store.de_la_semana(hoy),
+        excluir_familias=store.familias_de_la_semana(hoy),
     )
     if guardar:
         store.guardar(cola)
@@ -114,7 +118,7 @@ def main() -> int:
 
     texto, ml = toca.texto, None
     if toca.rubro == "ml":
-        ml = store.candidato_ml(dt.datetime.now())
+        ml = store.candidato_ml(dt.datetime.now(), store.familias_de_la_semana(hoy, salvo_hora=toca.hora))
         if ml is None:
             log.info("Sin oferta de ML fresca de hogar: va el respaldo de Shopee")
         else:
@@ -124,10 +128,32 @@ def main() -> int:
     if candado is None:
         return 0
     pasos = Pasos(RAIZ / "logs" / "cola_whatsapp" / time.strftime("%Y%m%d-%H%M%S"))
+    app, sec = os.getenv("SHOPEE_APP_ID", ""), os.getenv("SHOPEE_SECRET", "")
+    hooks = HookBank.from_file(RAIZ / "hooks.txt")
+    probados = {e.item_id for e in cola} | store.de_la_semana(hoy)
     try:
         wa = WhatsApp.conectar(pasos)
-        wa.abrir_grupo(os.environ["WHATSAPP_GRUPO_LINK"])
-        wa.mandar(texto, enviar=args.enviar)
+        for intento in range(MAX_REEMPLAZOS + 1):
+            try:
+                wa.abrir_grupo(os.environ["WHATSAPP_GRUPO_LINK"])
+                wa.mandar(texto, enviar=args.enviar)
+                break
+            except SinFoto as exc:
+                log.warning("Sin foto %s %s: %s", toca.hora, toca.titulo, exc)
+                nuevo = None
+                if args.enviar and intento < MAX_REEMPLAZOS:
+                    nuevo = reemplazo(
+                        toca.rubro, hoy,
+                        lambda b, ex: buscar_ideas(b, app, sec, cuantas=50, candidatos=50, excluir=ex),
+                        hooks, excluir=probados,
+                        excluir_familias=store.familias_de_la_semana(hoy, salvo_hora=toca.hora))
+                if nuevo is None:
+                    raise
+                idea, texto = nuevo
+                probados.add(idea.item_id)
+                store.reemplazar(toca, idea.titulo, texto, idea.item_id)
+                ml = None  # un ML sin foto cae al hogar de Shopee
+                log.info("Cambio %s por %s", toca.hora, idea.titulo)
     except CelularNoDisponible as exc:
         log.info("No mando %s todavia: %s. Pruebo en la proxima corrida.", toca.hora, exc)
         return 0

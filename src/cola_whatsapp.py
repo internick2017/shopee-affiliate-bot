@@ -31,9 +31,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from .familias import familia as _familia
 from .models import Product
 from .post_builder import HookBank, build_post, rango_relevante
-from .product_ideas import Idea, _firma, _normalizar
+from .product_ideas import Idea, _normalizar
 from .publicador_celular import bloqueado
 
 log = logging.getLogger(__name__)
@@ -57,6 +58,9 @@ HOGAR_ML = (
     "cafeteira", "chaleira", "ventilador", "cesto", "varal", "sapateira", "luminaria",
     "colcha", "manta", "aspirador", "faca", "tabua", "marmita",
 )
+# Palabras que delatan un suplemento aunque el titulo diga "pote" o "potes".
+NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemento",
+               "capsula", "omega 3", "mg por dose", "por dose")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 3 * 60 * 1000
@@ -94,7 +98,7 @@ class Envio:
     item_id: int
     titulo: str
     texto: str
-    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto
+    estado: str = "pendiente"   # pendiente | enviado | vencido | fallido | sin_foto | repetido
     enviado_ts: float | None = None
 
 
@@ -145,6 +149,9 @@ def sirve(rubro: str, idea: Idea) -> bool:
 
 def es_hogar_ml(titulo: str) -> bool:
     t = _normalizar(titulo)
+    # "03 POTES do PROPOLIS 1000mg" es un suplemento, no un pote de cocina.
+    if any(p in t for p in NO_HOGAR_ML):
+        return False
     return any(p in t for p in HOGAR_ML)
 
 
@@ -179,17 +186,19 @@ def armar_cola(
     hooks: HookBank,
     *,
     excluir: set[int],
+    excluir_familias: frozenset[str] = frozenset(),
     azar: random.Random | None = None,
 ) -> list[Envio]:
     """La cola del dia. `buscar(busqueda, excluir)` devuelve ideas ordenadas de
     mejor a peor; aca se reparten entre los horarios sin repetir producto ni
-    "tipo" de producto (la firma: dos organizadores de cajon seguidos aburren).
+    "tipo" de producto (la familia: dos organizadores de cajon seguidos aburren).
+    `excluir_familias` son los tipos ya mandados esta semana.
 
     Un horario que se queda sin candidato se saltea: mejor un hueco que un repetido."""
     azar = azar or random.Random()
     plan = plan_del_dia(fecha)
     usados = set(excluir)
-    firmas: set[str] = set()
+    firmas: set[str] = set(excluir_familias)
     pozos: dict[str, list[Idea]] = {}
     turno_hogar = fecha.toordinal()     # cada dia arranca por otra busqueda de hogar
     cola = []
@@ -206,7 +215,7 @@ def armar_cola(
             if b not in pozos:
                 pozos[b] = buscar(b, usados)
             for idea in pozos[b]:
-                if (idea.item_id not in usados and _firma(idea.titulo) not in firmas
+                if (idea.item_id not in usados and _familia(idea.titulo) not in firmas
                         and sirve(rubro, idea)):
                     elegida = idea
                     break
@@ -216,10 +225,31 @@ def armar_cola(
             log.warning("Sin producto para %s (%s): queda el hueco", hora, rubro)
             continue
         usados.add(elegida.item_id)
-        firmas.add(_firma(elegida.titulo))
+        firmas.add(_familia(elegida.titulo))
         cola.append(Envio(fecha.isoformat(), corrida(hora, azar), rubro, elegida.item_id,
                           elegida.titulo, texto_del_post(elegida, hooks.next())))
     return cola
+
+
+def reemplazo(
+    rubro: str,
+    fecha: dt.date,
+    buscar: Callable[[str, set[int]], list[Idea]],
+    hooks: HookBank,
+    *,
+    excluir: set[int],
+    excluir_familias: frozenset[str] = frozenset(),
+) -> tuple[Idea, str] | None:
+    """Otro producto del mismo rubro para un horario cuyo post no sirvio (sin foto
+    en la vista previa). Mismo horario, asi el tope diario y los porcentajes no se
+    mueven. Un horario de ML cae al hogar de Shopee, como su respaldo."""
+    busquedas = list(HOGAR) if rubro in ("hogar", "ml") else [rubro]
+    for b in busquedas:
+        for idea in buscar(b, excluir):
+            if (idea.item_id not in excluir and _familia(idea.titulo) not in excluir_familias
+                    and sirve(rubro, idea)):
+                return idea, texto_del_post(idea, hooks.next())
+    return None
 
 
 def a_enviar(cola: list[Envio], ahora: dt.datetime) -> tuple[Envio | None, list[Envio]]:
@@ -277,11 +307,13 @@ class ColaStore:
         self._db.commit()
         e.estado, e.enviado_ts = estado, ts
 
-    def reemplazar(self, e: Envio, titulo: str, texto: str) -> None:
-        self._db.execute("UPDATE envios SET titulo = ?, texto = ? WHERE fecha = ? AND hora = ?",
-                         (titulo, texto, e.fecha, e.hora))
+    def reemplazar(self, e: Envio, titulo: str, texto: str, item_id: int | None = None) -> None:
+        item_id = e.item_id if item_id is None else item_id
+        self._db.execute(
+            "UPDATE envios SET titulo = ?, texto = ?, item_id = ? WHERE fecha = ? AND hora = ?",
+            (titulo, texto, item_id, e.fecha, e.hora))
         self._db.commit()
-        e.titulo, e.texto = titulo, texto
+        e.titulo, e.texto, e.item_id = titulo, texto, item_id
 
     def agregar_ml(self, texto: str, *, ahora: float | None = None) -> None:
         """Lo llama el bot de ofertas cada vez que publica una oferta de ML ya
@@ -299,7 +331,8 @@ class ColaStore:
         )
         self._db.commit()
 
-    def candidato_ml(self, ahora: dt.datetime) -> tuple[str, str, str] | None:
+    def candidato_ml(self, ahora: dt.datetime,
+                     excluir_familias: frozenset[str] = frozenset()) -> tuple[str, str, str] | None:
         """(item_id, titulo, texto) de la oferta de ML de hogar mas reciente, fresca y
         no mandada esta semana; None si no hay."""
         lunes = dt.datetime.combine(ahora.date() - dt.timedelta(days=ahora.weekday()), dt.time())
@@ -308,12 +341,24 @@ class ColaStore:
             "AND (enviado_ts IS NULL OR enviado_ts < ?) ORDER BY ts DESC",
             (ahora.timestamp() - ML_FRESCA_HORAS * 3600, lunes.timestamp()),
         )
-        return next((f for f in filas if es_hogar_ml(f[1])), None)
+        return next((f for f in filas if es_hogar_ml(f[1])
+                     and _familia(f[1]) not in excluir_familias), None)
 
     def marcar_ml_enviado(self, item_id: str) -> None:
         self._db.execute("UPDATE ml_candidatos SET enviado_ts = ? WHERE item_id = ?",
                          (time.time(), item_id))
         self._db.commit()
+
+    def familias_de_la_semana(self, fecha: dt.date, *, salvo_hora: str | None = None) -> frozenset[str]:
+        """Tipos de producto ya mandados desde el lunes de esa semana, mas los que
+        quedan pendientes hoy (salvo el horario `salvo_hora`, que es el que se esta
+        resolviendo): un tipo no se repite en la semana."""
+        desde = (fecha - dt.timedelta(days=fecha.weekday())).isoformat()
+        filas = self._db.execute(
+            "SELECT titulo FROM envios WHERE fecha >= ? AND fecha <= ? AND "
+            "(estado = 'enviado' OR (fecha = ? AND estado = 'pendiente' AND hora != ?))",
+            (desde, fecha.isoformat(), fecha.isoformat(), salvo_hora or ""))
+        return frozenset(_familia(f[0]) for f in filas)
 
     def de_la_semana(self, fecha: dt.date) -> set[int]:
         """Productos planeados desde el lunes de esa semana (mandados o no): no se
@@ -373,13 +418,24 @@ class WhatsApp:
         titulo = self.d(resourceId=f"{PAQUETE}:id/link_preview_content").child(
             resourceId=f"{PAQUETE}:id/title")
         limite = time.time() + espera
+        sin_thumb = 0   # segundos seguidos con titulo y sin thumb
         while time.time() < limite:
             if cargada.exists:
                 time.sleep(1)  # que termine el fundido de la imagen
                 return True
             if titulo.exists and not self.d(resourceId=f"{PAQUETE}:id/thumb").exists:
-                return False
+                sin_thumb += 1
+                # 2026-10-28 12:44: un solo sondeo dio "sin foto" con la foto a la vista
+                # (carrera con la animacion). Hace falta que se sostenga unos segundos.
+                if sin_thumb >= 5:
+                    break
+            else:
+                sin_thumb = 0
             time.sleep(1)
+        # Volcado para ver que ids tenia la pantalla si vuelve a pasar.
+        self.pasos.foto(self.d, "sin_foto_jerarquia")
+        (Path(self.pasos.carpeta) / "jerarquia.xml").write_text(
+            self.d.dump_hierarchy(), encoding="utf-8")
         return False
 
     def mandar(self, texto: str, *, enviar: bool) -> None:
@@ -390,7 +446,7 @@ class WhatsApp:
         if caja.get_text() != texto:
             caja.clear_text()
             raise EnvioAbortado("El texto no quedo entero en la caja")
-        if not self._tarjeta_con_foto():
+        if not (self._tarjeta_con_foto() or self._tarjeta_con_foto(espera=10)):
             self.pasos.foto(self.d, "sin_foto")
             caja.clear_text()
             self.d.press("back")
