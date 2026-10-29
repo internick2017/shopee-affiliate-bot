@@ -163,7 +163,9 @@ def subir_short(
         logger.warning("No se pudo abrir la sesión de subida: %s", exc)
         return None
     if getattr(inicio, "status_code", None) != 200:
-        logger.warning("Subida rechazada: HTTP %s", getattr(inicio, "status_code", "?"))
+        # El motivo va en el log: "uploadLimitExceeded" es el tope diario del canal.
+        logger.warning("Subida rechazada: HTTP %s %s", getattr(inicio, "status_code", "?"),
+                       (getattr(inicio, "text", "") or "")[:300])
         return None
     destino = getattr(inicio, "headers", {}).get("Location")
     if not destino:

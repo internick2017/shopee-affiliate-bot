@@ -194,6 +194,11 @@ def main() -> int:
             except NoSePublico as exc:
                 fallidos += 1
                 print(f"  SALTEADO {v.item_id}: {exc}")
+                if "La subida fallo" in str(exc):
+                    # Casi siempre es el tope diario del canal (medido 2026-10-29: corto
+                    # al noveno). Seguir solo gasta intentos: el resto queda para manana.
+                    print("  Freno el lote: YouTube no acepta mas subidas por hoy.")
+                    break
                 continue
             print(f"  {v.item_id:>12}  https://youtube.com/shorts/{res.video_id}"
                   + ("" if res.comentado else "  (sin comentario: correr 'comentar')"))
