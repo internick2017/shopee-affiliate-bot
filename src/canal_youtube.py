@@ -12,6 +12,7 @@ renovación: `renovar_token` devuelve solo el access token.
 
 import logging
 from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -49,7 +50,7 @@ def url_de_autorizacion(client_id: str, redirect_uri: str) -> str:
     return f"https://accounts.google.com/o/oauth2/v2/auth?{parametros}"
 
 
-def _pedir_token(datos: dict, http_post: Callable[..., object]) -> dict | None:
+def _pedir_token(datos: dict, http_post: Callable[..., Any]) -> dict | None:
     try:
         respuesta = http_post(TOKEN_URL, data=datos)
     except Exception as exc:  # noqa: BLE001 - degradación segura
@@ -75,7 +76,7 @@ def autorizar(
     client_secret: str,
     redirect_uri: str,
     *,
-    http_post: Callable[..., object] = _post_por_defecto,
+    http_post: Callable[..., Any] = _post_por_defecto,
 ) -> tuple[str, str] | None:
     """Canje único del código de autorización. Se hace una sola vez, a mano."""
     cuerpo = _pedir_token(
@@ -98,7 +99,7 @@ def renovar_token(
     client_id: str,
     client_secret: str,
     *,
-    http_post: Callable[..., object] = _post_por_defecto,
+    http_post: Callable[..., Any] = _post_por_defecto,
 ) -> str | None:
     cuerpo = _pedir_token(
         {
@@ -130,8 +131,8 @@ def subir_short(
     *,
     privado: bool = False,
     categoria: str = CATEGORIA_TECNOLOGIA,
-    http_post: Callable[..., object] = _post_por_defecto,
-    http_put: Callable[..., object] = _put_por_defecto,
+    http_post: Callable[..., Any] = _post_por_defecto,
+    http_put: Callable[..., Any] = _put_por_defecto,
 ) -> str | None:
     """Sube el video y devuelve su id. None ante cualquier fallo.
 
@@ -200,7 +201,7 @@ def hacer_publico(
     video_id: str,
     access_token: str,
     *,
-    http_put: Callable[..., object] = _put_por_defecto,
+    http_put: Callable[..., Any] = _put_por_defecto,
 ) -> bool:
     """Pasa a publico un video ya subido. False ante cualquier fallo.
 
@@ -229,7 +230,7 @@ def comentar(
     texto: str,
     access_token: str,
     *,
-    http_post: Callable[..., object] = _post_por_defecto,
+    http_post: Callable[..., Any] = _post_por_defecto,
 ) -> bool:
     """Deja `texto` como comentario del canal en el video. False ante cualquier fallo.
 
