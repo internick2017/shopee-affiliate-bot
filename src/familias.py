@@ -33,6 +33,10 @@ _FAMILIAS = {
     "~copo": r"\bcopos?\b",
     "~unhas": r"\bunhas?\b|nail|cuticula",
     "~sandalia": r"sandalias?|papete",
+    # 2026-10-29: "Sapateira Organizadora..." y "Prateleira Sapateira..." salieron el mismo dia.
+    "~sapateira": r"\bsapateiras?\b|porta sapatos?",
+    # 2026-10-29: "Embalagens PVC Organizadora Roupa" y "Saco Organizador ... Roupas".
+    "~saco organizador roupa": r"(?=.*\b(sacos?|embalage\w*)\b)(?=.*\b(roupas?|rouparia|cobertor\w*|edredom)\b)",
 }
 
 

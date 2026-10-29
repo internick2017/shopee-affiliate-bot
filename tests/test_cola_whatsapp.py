@@ -232,3 +232,14 @@ def test_hogar_descarta_productos_de_auto_cargados_en_casa_e_cozinha():
     assert not sirve("ml", idea(2, "Suporte veicular para celular"))
     assert sirve("hogar", idea(3, "Espuma Spray Zip Clean Limpa a Seco Sofa, Estofado, Banco de Carro"))
     assert sirve("infantil", idea(4, "Carro de controle remoto", categorias=(1, 2, 3)))
+
+
+def test_familia_junta_sapateiras_y_sacos_de_roupa_del_2026_10_29():
+    # Salieron dos veces el mismo dia en el grupo: la primera palabra no los juntaba.
+    from src.familias import familia
+    assert familia("Sapateira Organizadora com 9 Prateleiras para Organizar Sapatos") == \
+        familia("Prateleira Sapateira 9 Andares De Metal E Plastico Organizador Multiuso")
+    assert familia("Kit 05 Embalagens PVC Organizadora Roupa, Cama, Mesa e Banho Armário") == \
+        familia("Kit 3 Saco Organizador Capa Protetora Multiuso Rouparia Roupas Cobertor")
+    assert familia("Cesto De Roupa 40x70 Caixa Dobrável") != familia("Kit 3 Saco Organizador Roupas")
+    assert familia("Prateleira de canto para banheiro") != familia("Sapateira 9 andares")
