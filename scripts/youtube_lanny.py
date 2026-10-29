@@ -6,6 +6,8 @@ Uso:
     python scripts/youtube_lanny.py pendientes             # videos de Lanny que faltan en YouTube
     python scripts/youtube_lanny.py subir <item_id> --simular   # muestra titulo, texto y link
     python scripts/youtube_lanny.py subir <item_id> [--privado] # sube, guarda y comenta el link
+    python scripts/youtube_lanny.py lote [--atrasados 5] [--simular]  # los nuevos + 5 atrasados
+    python scripts/youtube_lanny.py descartar <item_id>   # no subirlo nunca (video infiel, removido, etc.)
     python scripts/youtube_lanny.py comentar <item_id>    # el link como comentario (video ya publico)
     python scripts/youtube_lanny.py publico <item_id>     # pasa a publico uno subido con --privado y lo comenta
     python scripts/youtube_lanny.py rescatar <item_id> <video_id> <link>  # subio pero no guardo
@@ -25,6 +27,7 @@ import argparse
 import io
 import os
 import sys
+import time
 from pathlib import Path
 
 BOT = Path(__file__).resolve().parents[1]
@@ -37,11 +40,13 @@ from src.grabados_store import PublicacionesStore, VideosStore  # noqa: E402
 from src.video_canal import link_del_canal  # noqa: E402
 from src.youtube_lanny import (  # noqa: E402
     CANAL,
+    DESCARTADO,
     PLATAFORMA,
     TOKEN,
     NoSePublico,
     comentario,
     descripcion,
+    elegir_lote,
     pendientes,
     publicar,
     resolver_archivo,
@@ -50,7 +55,6 @@ from src.youtube_lanny import (  # noqa: E402
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 HOME_OFFICE_ENV = Path(r"E:\dev\01-web-apps\home-office-br\.env")
-ENTREGADOS = BOT / "videos_entregados" / "shopee-video-flow"
 REDIRECT = "http://localhost:8080"  # el mismo que tiene registrado la app de Setup Justo
 
 
@@ -81,11 +85,17 @@ def main() -> int:
     s.add_argument("item_id", type=int)
     s.add_argument("--privado", action="store_true")
     s.add_argument("--simular", action="store_true", help="no toca YouTube")
+    lo = sub.add_parser("lote", help="todos los nuevos (menos de 2 dias) y N atrasados ya "
+                                     "publicados en Shopee Video")
+    lo.add_argument("--atrasados", type=int, default=5)
+    lo.add_argument("--simular", action="store_true", help="solo lista, no toca YouTube")
     pu = sub.add_parser("publico")
     pu.add_argument("item_id", type=int)
     c = sub.add_parser("comentar", help="YouTube no deja comentar un video privado: "
                                           "correr esto despues de pasarlo a publico")
     c.add_argument("item_id", type=int)
+    de = sub.add_parser("descartar")
+    de.add_argument("item_id", type=int)
     r = sub.add_parser("rescatar")
     r.add_argument("item_id", type=int)
     r.add_argument("video_id")
@@ -95,6 +105,8 @@ def main() -> int:
     load_dotenv(BOT / ".env")
     db = os.getenv("GRABADOS_DB") or str(BOT / "grabados.db")
     pubs = PublicacionesStore(db)
+    # Los mp4 viven al lado de la base, aunque el script corra desde otro worktree.
+    entregados = Path(db).parent / "videos_entregados" / "shopee-video-flow"
 
     if args.cmd == "autorizar":
         cid, sec = _cliente_oauth()
@@ -108,6 +120,13 @@ def main() -> int:
             sys.exit("Google rechazo el codigo. Suele estar vencido: pedi uno nuevo.")
         pubs.guardar_credencial(TOKEN, tokens[1])
         print("Canal autorizado.")
+        return 0
+
+    if args.cmd == "descartar":
+        if pubs.id_externo(args.item_id, CANAL, PLATAFORMA) not in (None, DESCARTADO):
+            sys.exit("Ya esta subido: borralo en Studio y despues sacale el registro")
+        pubs.registrar(args.item_id, canal=CANAL, plataforma=PLATAFORMA, id_externo=DESCARTADO)
+        print(f"{args.item_id} descartado: no se ofrece mas para YouTube")
         return 0
 
     if args.cmd == "rescatar":
@@ -137,7 +156,7 @@ def main() -> int:
 
     videos = VideosStore(db)
     if args.cmd == "pendientes":
-        lista = pendientes([resolver_archivo(v, ENTREGADOS)
+        lista = pendientes([resolver_archivo(v, entregados)
                             for v in videos.listar(canal=CANAL, cuantos=1000)],
                            pubs.ids_publicados(CANAL, PLATAFORMA))
         for v in lista:
@@ -146,16 +165,8 @@ def main() -> int:
         print(f"\n{len(lista)} pendientes")
         return 0
 
-    video = resolver_archivo(_video(videos, args.item_id), ENTREGADOS)
-
     def generar_link(item_id: int) -> str:
         return link_del_canal(item_id, CANAL, plataforma=PLATAFORMA)
-
-    if args.simular:
-        link = generar_link(video.item_id)
-        print(f"Archivo: {video.archivo}\nTitulo: {titulo(video)}\n")
-        print(f"Descripcion:\n{descripcion(video, link)}\n\nComentario: {comentario(link)}")
-        return 0
 
     cid, sec = _cliente_oauth()
 
@@ -164,6 +175,41 @@ def main() -> int:
         if not refresh:
             sys.exit("El canal no esta autorizado: corre 'autorizar'")
         return canal_youtube.renovar_token(refresh, cid, sec)
+
+    if args.cmd == "lote":
+        lista = elegir_lote(
+            pendientes([resolver_archivo(v, entregados)
+                        for v in videos.listar(canal=CANAL, cuantos=1000)],
+                       pubs.ids_publicados(CANAL, PLATAFORMA)),
+            args.atrasados, time.time())
+        print(f"{len(lista)} para subir hoy")
+        fallidos = 0
+        for i, v in enumerate(lista):
+            if args.simular:
+                print(f"  {v.item_id:>12}  {titulo(v)}")
+                continue
+            try:
+                res = publicar(v, pubs, generar_link=generar_link, access_token=access_token,
+                               subir=canal_youtube.subir_short, comentar=canal_youtube.comentar)
+            except NoSePublico as exc:
+                fallidos += 1
+                print(f"  SALTEADO {v.item_id}: {exc}")
+                continue
+            print(f"  {v.item_id:>12}  https://youtube.com/shorts/{res.video_id}"
+                  + ("" if res.comentado else "  (sin comentario: correr 'comentar')"))
+            if i < len(lista) - 1:
+                time.sleep(20)  # no subir todo de un tiron
+        if not args.simular:
+            print(f"Listo: {len(lista) - fallidos} subidos, {fallidos} salteados")
+        return 1 if fallidos else 0
+
+    video = resolver_archivo(_video(videos, args.item_id), entregados)
+
+    if args.simular:
+        link = generar_link(video.item_id)
+        print(f"Archivo: {video.archivo}\nTitulo: {titulo(video)}\n")
+        print(f"Descripcion:\n{descripcion(video, link)}\n\nComentario: {comentario(link)}")
+        return 0
 
     try:
         res = publicar(video, pubs, generar_link=generar_link, access_token=access_token,

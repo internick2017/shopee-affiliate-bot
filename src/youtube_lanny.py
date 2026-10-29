@@ -25,6 +25,9 @@ from .video_duracion import problema_del_archivo
 CANAL = "lanny"
 PLATAFORMA = "youtube"
 TOKEN = "youtube_lanny_refresh"
+# Marca en `publicaciones` de un video que NO va a YouTube (p. ej. Shopee lo removio por
+# no ser fiel): asi `pendientes` y `lote` no lo vuelven a ofrecer.
+DESCARTADO = "descartado"
 
 AVISO = ("Este vídeo contém links de afiliado. Se você comprar por eles, "
          "recebo uma comissão, sem custo adicional para você.")
@@ -79,6 +82,20 @@ def pendientes(videos: list[VideoProducido], publicados: set[int]) -> list[Video
             if v.item_id not in publicados and v.archivo and Path(v.archivo).is_file()]
 
 
+NUEVO_S = 2 * 24 * 3600  # producido hace menos de 2 dias: entra siempre
+
+
+def elegir_lote(pend: list[VideoProducido], atrasados: int, ahora: float) -> list[VideoProducido]:
+    """Lo que sube hoy: todos los nuevos y `atrasados` de los viejos (decision de Nick,
+    2026-10-29: 5 por dia, para ponerse al dia sin que un canal nuevo parezca spam).
+
+    Solo cuentan como atrasados los que Lanny ya publico en Shopee Video: publicarlos
+    fue su visto bueno. Los mas recientes primero (`pend` viene ordenado asi)."""
+    nuevos = [v for v in pend if ahora - v.ts < NUEVO_S]
+    viejos = [v for v in pend if ahora - v.ts >= NUEVO_S and v.publicado]
+    return nuevos + viejos[:max(0, atrasados)]
+
+
 def publicar(
     video: VideoProducido,
     store: PublicacionesStore,
@@ -91,6 +108,8 @@ def publicar(
     revisar: Callable[[str], str | None] = problema_del_archivo,
 ) -> Resultado:
     ya = store.id_externo(video.item_id, CANAL, PLATAFORMA)
+    if ya == DESCARTADO:
+        raise NoSePublico("Esta descartado para YouTube")
     if ya:
         raise NoSePublico(f"Ya esta en YouTube: https://youtube.com/shorts/{ya}")
     if not video.archivo or not Path(video.archivo).is_file():

@@ -7,6 +7,7 @@ from src.grabados_store import PublicacionesStore, VideoProducido
 from src.youtube_lanny import (
     NoSePublico,
     descripcion,
+    elegir_lote,
     pendientes,
     publicar,
     resolver_archivo,
@@ -116,3 +117,27 @@ def test_video_con_imagen_cortada_no_se_sube(store, mp4):
         publicar(video(mp4), store, generar_link=lambda _: pytest.fail("no"),
                  access_token=lambda: "t", subir=lambda *a, **k: pytest.fail("no"),
                  comentar=lambda *a: True, revisar=lambda _: "la imagen termina antes")
+
+
+def test_lote_lleva_todos_los_nuevos_y_pocos_atrasados_ya_publicados():
+    dia = 24 * 3600
+    ahora = 100 * dia
+
+    def v(item, hace_dias, publicado):
+        x = video()
+        x.item_id, x.ts = item, ahora - hace_dias * dia
+        x.publicado_ts = 1.0 if publicado else None
+        return x
+
+    pend = [v(1, 0.5, False), v(2, 1, True), v(3, 5, True), v(4, 6, False), v(5, 7, True),
+            v(6, 8, True)]
+    assert [x.item_id for x in elegir_lote(pend, 2, ahora)] == [1, 2, 3, 5]
+    assert [x.item_id for x in elegir_lote(pend, 0, ahora)] == [1, 2]
+
+
+def test_descartado_no_se_sube(store, mp4):
+    store.registrar(58, canal="lanny", plataforma="youtube", id_externo="descartado")
+    assert pendientes([video(mp4)], store.ids_publicados("lanny", "youtube")) == []
+    with pytest.raises(NoSePublico, match="descartado"):
+        publicar(video(mp4), store, generar_link=lambda _: "x", access_token=lambda: "t",
+                 subir=lambda *a, **k: pytest.fail("no"), comentar=lambda *a: True)
