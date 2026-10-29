@@ -183,7 +183,7 @@ def main() -> int:
                        pubs.ids_publicados(CANAL, PLATAFORMA)),
             args.atrasados, time.time())
         print(f"{len(lista)} para subir hoy")
-        fallidos = 0
+        subidos = fallidos = 0
         for i, v in enumerate(lista):
             if args.simular:
                 print(f"  {v.item_id:>12}  {titulo(v)}")
@@ -200,12 +200,14 @@ def main() -> int:
                     print("  Freno el lote: YouTube no acepta mas subidas por hoy.")
                     break
                 continue
+            subidos += 1
             print(f"  {v.item_id:>12}  https://youtube.com/shorts/{res.video_id}"
                   + ("" if res.comentado else "  (sin comentario: correr 'comentar')"))
             if i < len(lista) - 1:
                 time.sleep(20)  # no subir todo de un tiron
         if not args.simular:
-            print(f"Listo: {len(lista) - fallidos} subidos, {fallidos} salteados")
+            print(f"Listo: {subidos} subidos, {fallidos} salteados, "
+                  f"{len(lista) - subidos - fallidos} quedan para manana")
         return 1 if fallidos else 0
 
     video = resolver_archivo(_video(videos, args.item_id), entregados)
