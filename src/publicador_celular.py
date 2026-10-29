@@ -207,7 +207,9 @@ class Celular:
 
     def ir_a_shopee_video(self) -> None:
         # Ese mismo punto en WhatsApp es el boton de videollamada (2026-10-26 llamo a Lanny).
-        if self.d.app_current().get("package") != "com.shopee.br":
+        # app_current() de uiautomator2 devolvio una app vieja (TikTok) con Shopee al frente.
+        foco = self.d.shell("dumpsys window | grep mCurrentFocus").output
+        if "com.shopee.br" not in foco:
             self.pasos.foto(self.d, "no_es_shopee")
             raise PublicacionAbortada("La app al frente no es Shopee: no toco a ciegas")
         self.d.click(510, 117)  # icono compartir de la barra superior, sin texto

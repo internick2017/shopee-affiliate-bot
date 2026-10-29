@@ -67,7 +67,7 @@ NO_HOGAR_ML = ("propolis", "creatina", "whey", "colageno", "vitamina", "suplemen
 NO_CASA = ("pneu", "pneus", "automotivo", "automotiva", "automotivos", "veicular")
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
-EN_USO_MS = 3 * 60 * 1000
+EN_USO_MS = 30 * 1000
 # Lo vendido por WhatsApp en 89 dias fue de R$ 9,90 a R$ 109,99 (mediana R$ 29,90):
 # una impresora o un tablet no es lo que este grupo compra.
 PRECIO_MAXIMO = Decimal("120")
