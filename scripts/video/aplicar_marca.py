@@ -66,18 +66,23 @@ def ffmpeg_exe() -> str:
 
 
 def filtro(con_foto: bool) -> str:
-    """Grafo de ffmpeg: entrada 0 = video, 1 = marca, 2 = foto del producto (opcional)."""
+    """Grafo de ffmpeg: entrada 0 = video, 1 = marca, 2 = foto del producto (opcional).
+
+    El video sale siempre en 1080x1920: Flow entrega 720x1280 y Shopee se lo rechazaba
+    a Lanny por baja resolucion (2026-10-28)."""
+    base = "[0:v]scale=1080:1920:flags=lanczos[base];"
     marca = (
         f"[1:v]scale={ANCHO_MARCA}:-1,format=rgba,colorchannelmixer=aa={OPACIDAD}[wm];"
     )
     if not con_foto:
-        return marca + f"[0:v][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
+        return base + marca + f"[base][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
     lado = ANCHO_FOTO
     return (
-        marca
+        base
+        + marca
         + f"[2:v]scale={lado}:{lado}:force_original_aspect_ratio=decrease,"
         f"pad={lado + 2 * BORDE_FOTO}:{lado + 2 * BORDE_FOTO}:(ow-iw)/2:(oh-ih)/2:white[ph];"
-        f"[0:v][ph]overlay={MARGEN_FOTO_X}:{MARGEN_FOTO_Y}[v1];"
+        f"[base][ph]overlay={MARGEN_FOTO_X}:{MARGEN_FOTO_Y}[v1];"
         f"[v1][wm]overlay=W-w-{MARGEN}:H-h-{MARGEN}"
     )
 
@@ -111,6 +116,7 @@ def aplicar(
         *(["-i", str(foto)] if foto else []),
         "-filter_complex",
         filtro(foto is not None),
+        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
         "-c:a",
         "copy",  # el audio (la narracion) pasa intacto, sin recomprimir
         str(salida),
