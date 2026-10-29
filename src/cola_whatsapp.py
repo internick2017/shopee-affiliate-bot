@@ -488,7 +488,13 @@ class WhatsApp:
         self.d.shell(f"am start -a android.intent.action.SEND -t image/jpeg "
                      f"--eu android.intent.extra.STREAM file://{destino} -p {PAQUETE}")
         fila = self.d(text=grupo, resourceId=f"{PAQUETE}:id/contactpicker_row_name")
-        if not fila.wait(timeout=15):
+        lupa = self.d(resourceId=f"{PAQUETE}:id/menuitem_search")
+        # El grupo no siempre esta entre los frecuentes (2026-10-29 13:12): se busca por nombre.
+        if not fila.wait(timeout=5) and lupa.wait(timeout=10):
+            lupa.click()
+            self.d(className="android.widget.EditText").set_text(grupo)
+            time.sleep(2)
+        if not fila.wait(timeout=10):
             self.pasos.foto(self.d, "sin_grupo_para_compartir")
             self.d.press("back")
             raise EnvioAbortado(f"No aparecio {grupo!r} para compartir la foto")
