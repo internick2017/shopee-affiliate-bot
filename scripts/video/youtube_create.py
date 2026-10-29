@@ -5,7 +5,7 @@ Uso (desde la raiz del repo):
     python scripts/video/youtube_create.py <indice_galeria> <salida.mp4> "<prompt>"
 
 `indice_galeria` es la posicion de la imagen en el selector de la app (0 = la mas nueva).
-Sale con codigo 2 si la cuenta llego al limite ("Você alcançou o limite"): el cupo es por
+Sale con codigo 3 si la imagen del video baja mas corta que el audio, y con codigo 2 si la cuenta llego al limite ("Você alcançou o limite"): el cupo es por
 cuenta Google, se cambia en "Menu da conta". Las capturas de cada paso quedan en
 logs/youtube_create/. Toma el candado del celular (el de la cola de WhatsApp y Shopee Video).
 Coordenadas medidas el 2026-10-29 en el Galaxy A07 (720x1600).
@@ -30,6 +30,19 @@ PAQUETE = "com.google.android.apps.youtube.producer"
 def adb(*args: str) -> str:
     env = {**os.environ, "MSYS_NO_PATHCONV": "1"}
     return subprocess.run(["adb", *args], capture_output=True, text=True, encoding="utf-8", env=env).stdout
+
+
+def duracion(archivo: Path, stream: str) -> float:
+    """Segundos de un stream ("v" o "a"), copiandolo sin re-encodear."""
+    import re
+
+    import imageio_ffmpeg
+
+    salida = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", str(archivo),
+                             "-map", f"0:{stream}?", "-c", "copy", "-f", "null", "-"],
+                            capture_output=True, text=True, errors="replace").stderr
+    t = re.findall(r"time=(\d+):(\d+):([\d.]+)", salida)
+    return int(t[-1][0]) * 3600 + int(t[-1][1]) * 60 + float(t[-1][2]) if t else 0.0
 
 
 def main() -> int:
@@ -98,10 +111,33 @@ def main() -> int:
         foto("sin_guardar")
         print("No aparecio el archivo guardado")
         return 1
-    time.sleep(2)
-    adb("pull", "/sdcard/Download/" + sorted(nuevos)[-1], str(salida))
-    print("BAJADO", salida)
+    # La app reserva el tamano final del archivo antes de terminar de escribirlo: copiarlo
+    # enseguida dejo 4 videos con la imagen cortada (2026-10-29). Esperar a que deje de crecer.
+    origen = "/sdcard/Download/" + sorted(nuevos)[-1]
+    anterior = ""
+    for _ in range(30):
+        time.sleep(3)
+        actual = adb("shell", "stat", "-c", "%s %Y", origen).strip()
+        if actual and actual == anterior:
+            break
+        anterior = actual
+    time.sleep(5)
+    adb("pull", origen, str(salida))
     d.press("home")
+    # 2026-10-29: 4 de 6 videos bajaron con la imagen cortada a ~4,8 s y el audio a 10 s
+    # (el ultimo cuadro queda quieto y la voz sigue). Copiado de nuevo despues, estaba
+    # entero: se vuelve a copiar hasta 3 veces, y si sigue cortado no se entrega.
+    imagen, audio = duracion(salida, "v"), duracion(salida, "a")
+    for _ in range(3):
+        if imagen >= audio - 0.5:
+            break
+        time.sleep(15)
+        adb("pull", origen, str(salida))
+        imagen, audio = duracion(salida, "v"), duracion(salida, "a")
+    if imagen < audio - 0.5:
+        print(f"CORTADO imagen {imagen:.1f} s, audio {audio:.1f} s: volver a generar", salida)
+        return 3
+    print("BAJADO", salida, f"imagen {imagen:.1f} s, audio {audio:.1f} s")
     return 0
 
 
