@@ -191,6 +191,34 @@ def subir_short(
 
 
 
+VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+
+def hacer_publico(
+    video_id: str,
+    access_token: str,
+    *,
+    http_put: Callable[..., object] = _put_por_defecto,
+) -> bool:
+    """Pasa a publico un video ya subido. False ante cualquier fallo.
+
+    `videos.update` reemplaza el `status` entero: lo que no se manda vuelve al
+    default, por eso va tambien `selfDeclaredMadeForKids`."""
+    cuerpo = {"id": video_id,
+              "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}
+    try:
+        r = http_put(f"{VIDEOS_URL}?part=status",
+                     headers={"Authorization": f"Bearer {access_token}"}, json=cuerpo)
+    except Exception as exc:  # noqa: BLE001 - degradación segura
+        logger.warning("No se pudo cambiar la privacidad de %s: %s", video_id, exc)
+        return False
+    if getattr(r, "status_code", None) != 200:
+        logger.warning("Cambio de privacidad rechazado en %s: HTTP %s", video_id,
+                       getattr(r, "status_code", "?"))
+        return False
+    return True
+
+
 COMENTARIOS_URL = "https://www.googleapis.com/youtube/v3/commentThreads"
 
 

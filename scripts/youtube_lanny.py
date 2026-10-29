@@ -7,6 +7,7 @@ Uso:
     python scripts/youtube_lanny.py subir <item_id> --simular   # muestra titulo, texto y link
     python scripts/youtube_lanny.py subir <item_id> [--privado] # sube, guarda y comenta el link
     python scripts/youtube_lanny.py comentar <item_id>    # el link como comentario (video ya publico)
+    python scripts/youtube_lanny.py publico <item_id>     # pasa a publico uno subido con --privado y lo comenta
     python scripts/youtube_lanny.py rescatar <item_id> <video_id> <link>  # subio pero no guardo
 
 Autorizar: abrir el enlace en el Chrome donde esta la sesion de herreralanny@gmail.com,
@@ -80,6 +81,8 @@ def main() -> int:
     s.add_argument("item_id", type=int)
     s.add_argument("--privado", action="store_true")
     s.add_argument("--simular", action="store_true", help="no toca YouTube")
+    pu = sub.add_parser("publico")
+    pu.add_argument("item_id", type=int)
     c = sub.add_parser("comentar", help="YouTube no deja comentar un video privado: "
                                           "correr esto despues de pasarlo a publico")
     c.add_argument("item_id", type=int)
@@ -113,7 +116,7 @@ def main() -> int:
         print(f"Guardado: {args.item_id} = https://youtube.com/shorts/{args.video_id}")
         return 0
 
-    if args.cmd == "comentar":
+    if args.cmd in ("comentar", "publico"):
         vid = pubs.id_externo(args.item_id, CANAL, PLATAFORMA)
         if not vid:
             sys.exit(f"{args.item_id} no esta en YouTube todavia")
@@ -122,6 +125,10 @@ def main() -> int:
         token = refresh and canal_youtube.renovar_token(refresh, cid, sec)
         if not token:
             sys.exit("No se pudo renovar el acceso: corre 'autorizar'")
+        if args.cmd == "publico":
+            if not canal_youtube.hacer_publico(vid, token):
+                sys.exit("YouTube rechazo el cambio a publico")
+            print(f"Publico: https://youtube.com/shorts/{vid}")
         ok = canal_youtube.comentar(vid, comentario(pubs.link_publicado(args.item_id, CANAL, PLATAFORMA)),
                                     token)
         print("Comentario listo (fijarlo a mano en Studio)" if ok
@@ -169,8 +176,8 @@ def main() -> int:
     if res.comentado:
         print("Comentario con el link: listo (fijarlo a mano en Studio)")
     elif args.privado:
-        print(f"Comentario: YouTube no deja comentar un video privado. Al pasarlo a publico: "
-              f"python scripts/youtube_lanny.py comentar {video.item_id}")
+        print(f"Comentario: YouTube no deja comentar un video privado. Para pasarlo a publico "
+              f"y comentarlo: python scripts/youtube_lanny.py publico {video.item_id}")
     else:
         print(f"Comentario: FALLO. Reintentar con: python scripts/youtube_lanny.py comentar {video.item_id}")
     return 0

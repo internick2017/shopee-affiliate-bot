@@ -1,6 +1,6 @@
 """El adaptador copiado de home-office-br: solo lo que cambio al copiarlo."""
 
-from src.canal_youtube import CATEGORIA_ESTILO, subir_short
+from src.canal_youtube import CATEGORIA_ESTILO, hacer_publico, subir_short
 
 
 class Resp:
@@ -26,3 +26,16 @@ def test_subir_short_usa_la_categoria_pedida(tmp_path):
     assert vid == "V1"
     assert enviado["snippet"]["categoryId"] == "26"
     assert enviado["status"]["privacyStatus"] == "private"
+
+
+def test_hacer_publico_manda_el_status_completo():
+    enviado = {}
+
+    def put(url, **kw):
+        enviado.update(url=url, **kw["json"])
+        return Resp(200)
+
+    assert hacer_publico("V1", "tok", http_put=put)
+    assert enviado["url"].endswith("part=status")
+    assert enviado["status"] == {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+    assert not hacer_publico("V1", "tok", http_put=lambda *a, **k: Resp(403))
