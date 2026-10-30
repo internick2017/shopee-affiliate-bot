@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ))
 from src.familias import cruzar  # noqa: E402
+from src.vetados import vetado  # noqa: E402
 
 TZ = ZoneInfo("America/Sao_Paulo")
 REGISTRO_TIKTOK = RAIZ.parent / "tiktok-hogar" / "registro.csv"
@@ -50,7 +51,10 @@ def main() -> int:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     hay = False
     for titulo, choques in cruzar(args.titulos, historial(args.canal), time.time(), args.dias):
-        if choques:
+        if vetado(titulo):
+            hay = True
+            print(f"VETADO    {titulo[:70]}  (alcohol, cigarrillo o armas: no se publica)")
+        elif choques:
             hay = True
             print(f"REPETIDO  {titulo[:70]}")
             for c in choques:
