@@ -90,8 +90,10 @@ class Envio:
         calidad = self.d(resourceId=f"{WA}:id/media_upload_quality_settings")
         if "Desativada" in calidad.info["contentDescription"]:
             calidad.click()
-            time.sleep(2)
-            self.d(resourceId=f"{WA}:id/media_quality_hd").click(timeout=10)
+            hd = self.d(resourceId=f"{WA}:id/media_quality_hd")
+            if not hd.wait(timeout=5):  # con el editor recien abierto el primer toque a veces se pierde
+                calidad.click()
+            hd.click(timeout=10)
             time.sleep(2)
         if "Ativada" not in calidad.info["contentDescription"]:
             raise Fallo("HD no quedo prendido")
