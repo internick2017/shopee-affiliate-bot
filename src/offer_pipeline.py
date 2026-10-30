@@ -1,5 +1,7 @@
 import logging
 
+from .vetados import vetado
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +21,10 @@ class OfferPipeline:
         self._handlers = list(handlers)
 
     async def handle(self, text, chat_title=None, photo=None) -> int:
+        # shortcut: mira el mensaje entero; uno con varios productos se descarta completo.
+        if vetado(text or ""):
+            logger.info("Mensaje descartado: alcohol, cigarrillo o armas")
+            return 0
         total = 0
         for handler in self._handlers:
             try:

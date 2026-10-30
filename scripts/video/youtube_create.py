@@ -61,7 +61,11 @@ def main() -> int:
     time.sleep(7)
     d.click(427, 684)  # Gerar vídeo
     time.sleep(3)
-    d(description="Adicionar mídia").click(timeout=10)  # el boton se mueve con el teclado
+    # el boton se mueve con el teclado; sin imagen previa en la sesion se llama distinto (2026-10-30)
+    boton = d(description="Adicionar mídia")
+    if not boton.exists(timeout=3):
+        boton = d(description="Fazer upload de até 3 imagens")
+    boton.click(timeout=10)
     time.sleep(3)
     celda = d.xpath(f'//*[contains(@resource-id,"mediaThumbnail-{idx}")]')
     if celda.exists:

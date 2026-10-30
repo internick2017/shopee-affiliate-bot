@@ -36,6 +36,7 @@ from .models import Product
 from .post_builder import HookBank, build_post, rango_relevante
 from .product_ideas import Idea, _normalizar
 from .publicador_celular import bloqueado
+from .vetados import vetado
 
 log = logging.getLogger(__name__)
 
@@ -146,7 +147,7 @@ def corrida(hora: str, azar: random.Random) -> str:
 
 def sirve(rubro: str, idea: Idea) -> bool:
     """Hogar tiene que ser de Casa e Cozinha: buscar "potes" tambien trae creatina."""
-    if idea.precio > PRECIO_MAXIMO:
+    if idea.precio > PRECIO_MAXIMO or vetado(idea.titulo):
         return False
     if rubro not in ("hogar", "ml"):
         return True
@@ -157,7 +158,7 @@ def sirve(rubro: str, idea: Idea) -> bool:
 def es_hogar_ml(titulo: str) -> bool:
     t = _normalizar(titulo)
     # "03 POTES do PROPOLIS 1000mg" es un suplemento, no un pote de cocina.
-    if any(p in t for p in NO_HOGAR_ML):
+    if vetado(titulo) or any(p in t for p in NO_HOGAR_ML):
         return False
     return any(p in t for p in HOGAR_ML)
 
