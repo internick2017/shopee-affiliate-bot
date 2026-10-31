@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.grabados_store import VideosStore
+from src.grabados_store import IntentosStore, VideosStore
 from src.shopee_resolver import ShopeeOffer
 from src.video_canal import credenciales, link_del_canal, registrar_video
 
@@ -24,7 +24,10 @@ def oferta() -> ShopeeOffer:
 
 @pytest.fixture
 def store(tmp_path):
-    return VideosStore(tmp_path / "g.db")
+    videos = VideosStore(tmp_path / "g.db")
+    IntentosStore(tmp_path / "g.db").registrar(
+        "capa", herramienta="Flow", prompt="prompt", estado="generado", item_id=42)
+    return videos
 
 
 def test_credenciales_por_canal():
@@ -67,6 +70,14 @@ def test_si_no_se_puede_generar_el_link_no_registra_nada(store):
         registrar_video(store, oferta(), canal="nick", herramienta="Flow", marca="@nickgranados",
                         archivo="capa.mp4", env=ENV,
                         buscar_url=lambda *_: "https://shopee.com.br/product/7/42", retag=lambda *_: None)
+    assert store.listar(canal="nick") == []
+
+
+def test_sin_prompt_anotado_no_registra_el_video(tmp_path):
+    store = VideosStore(tmp_path / "g.db")
+    with pytest.raises(RuntimeError, match="Falta el prompt de 42"):
+        registrar_video(store, oferta(), canal="nick", herramienta="Flow Music", marca="@n",
+                        archivo="a.mp4", env=ENV)
     assert store.listar(canal="nick") == []
 
 
