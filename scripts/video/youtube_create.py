@@ -2,7 +2,7 @@
 celular y lo baja a la PC. Los videos de Lanny se hacen asi (Flow es para los de Nick).
 
 Uso (desde la raiz del repo):
-    python scripts/video/youtube_create.py <indice_galeria> <salida.mp4> "<prompt>"
+    python scripts/video/youtube_create.py <indice_galeria> <salida.mp4> "<prompt>" [gancho] [item_id]
 
 `indice_galeria` es la posicion de la imagen en el selector de la app (0 = la mas nueva).
 Sale con codigo 3 si la imagen del video baja mas corta que el audio, y con codigo 2 si la cuenta llego al limite ("Você alcançou o limite"): el cupo es por
@@ -52,6 +52,8 @@ def duracion(archivo: Path, stream: str) -> float:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     idx, salida, prompt = int(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+    gancho = sys.argv[4] if len(sys.argv) > 4 else "sin gancho"
+    item_id = int(sys.argv[5]) if len(sys.argv) > 5 else None
     candado = open(RAIZ / "logs" / "publicador.lock", "w")  # noqa: SIM115 abierto toda la corrida
     msvcrt.locking(candado.fileno(), msvcrt.LK_NBLCK, 1)
     CAPTURAS.mkdir(parents=True, exist_ok=True)
@@ -100,6 +102,9 @@ def main() -> int:
             break
     foto("resultado")
     print("ESTADO", estado)
+    IntentosStore(RAIZ / "grabados.db").registrar(
+        salida.stem, herramienta="YouTube Create", prompt=prompt, estado=estado,
+        gancho=gancho, item_id=item_id)
     if estado != "ok":
         return 2
     d(description="Mais opções").click(timeout=10)
