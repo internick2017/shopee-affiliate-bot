@@ -197,6 +197,12 @@ class VideosStore:
             self._conn.execute(
                 "ALTER TABLE videos_producidos ADD COLUMN fidelidad_ts REAL")
         self._conn.commit()
+        _crear_intentos(self._conn)
+
+    def tiene_intento(self, item_id: int) -> bool:
+        return self._conn.execute(
+            "SELECT 1 FROM intentos_video WHERE item_id = ? LIMIT 1", (int(item_id),)
+        ).fetchone() is not None
 
     def registrar(
         self,
@@ -410,19 +416,23 @@ class PublicacionesStore:
         return fila[0] if fila else None
 
 
+def _crear_intentos(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS intentos_video ("
+        "id INTEGER PRIMARY KEY, ts REAL NOT NULL, nombre TEXT NOT NULL, item_id INTEGER, "
+        "herramienta TEXT NOT NULL, gancho TEXT NOT NULL, prompt TEXT NOT NULL, "
+        "estado TEXT NOT NULL, nota TEXT, movimiento REAL)"
+    )
+    conn.commit()
+
+
 class IntentosStore:
     """Cada intento de generar un video con su prompt y su resultado, para saber que
     prompts funcionan. Guarda tambien los que fallan: sin ellos no hay tasa de error."""
 
     def __init__(self, db_path: str | Path):
         self._conn = sqlite3.connect(str(db_path))
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS intentos_video ("
-            "id INTEGER PRIMARY KEY, ts REAL NOT NULL, nombre TEXT NOT NULL, item_id INTEGER, "
-            "herramienta TEXT NOT NULL, gancho TEXT NOT NULL, prompt TEXT NOT NULL, "
-            "estado TEXT NOT NULL, nota TEXT, movimiento REAL)"
-        )
-        self._conn.commit()
+        _crear_intentos(self._conn)
 
     def registrar(self, nombre: str, *, herramienta: str, prompt: str, estado: str,
                   gancho: str = "sin gancho", item_id: int | None = None,

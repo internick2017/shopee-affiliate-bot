@@ -96,6 +96,12 @@ def registrar_video(
     de afuera a proposito. Si el link no se puede generar, no registra nada."""
     if of.item_id is None:
         raise ValueError("El offer no tiene item_id: sin eso no hay producto que registrar")
+    # Asi el prompt queda guardado con cualquier herramienta, no solo con las que tienen script.
+    if not store.tiene_intento(of.item_id):
+        raise RuntimeError(
+            f"Falta el prompt de {of.item_id}: scripts/video/intentos.py registrar "
+            f'<nombre> "{herramienta}" "<prompt>" <gancho> {of.item_id}'
+        )
     link = link_del_canal(of.item_id, canal, env=env, buscar_url=buscar_url, retag=retag)
     store.registrar(
         of.item_id,
