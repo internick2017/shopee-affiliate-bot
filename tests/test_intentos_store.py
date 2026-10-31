@@ -32,3 +32,26 @@ def test_un_rechazo_cuenta_como_intento_sin_aprobar(tmp_path):
 
 def test_marcar_un_nombre_desconocido_avisa(tmp_path):
     assert not IntentosStore(tmp_path / "g.db").marcar("nada", "ok")
+
+
+def test_comparar_separa_cortos_de_largos_y_cuenta_las_ventas_una_vez(tmp_path):
+    s = IntentosStore(tmp_path / "g.db")
+    largo = "x" * 121
+    s.registrar("a", herramienta="YouTube Create", prompt="Larissa mostra.", estado="ok", gancho="accion", item_id=1)
+    s.registrar("b", herramienta="YouTube Create", prompt="otro corto", estado="ok", gancho="accion", item_id=1)
+    s.registrar("c", herramienta="Flow app", prompt=largo, estado="defecto", gancho="accion", item_id=2)
+
+    assert s.comparar({1: 5, 2: 9}) == [
+        ("gancho accion", 3, 2, 1, 5),
+        ("Flow, prompt largo", 1, 0, 1, 0),
+        ("YouTube Create, prompt corto", 2, 2, 0, 5),
+    ]
+
+
+def test_comparar_ignora_cupos_y_pruebas_invalidas(tmp_path):
+    s = IntentosStore(tmp_path / "g.db")
+    s.registrar("a", herramienta="YouTube Create", prompt="p", estado="limite")
+    s.registrar("b", herramienta="Flow", prompt="p", estado="generado")
+    s.marcar("b", "defecto", nota="PRUEBA INVALIDA: sin imagen")
+
+    assert s.comparar({}) == []

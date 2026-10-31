@@ -129,7 +129,9 @@ def main() -> int:
     foto("resultado")
     print("ESTADO", estado)
     IntentosStore(RAIZ / "grabados.db").registrar(
-        salida.stem, herramienta="YouTube Create", prompt=prompt, estado=estado,
+        # "ok" solo lo da el control final: que la app genere no dice que el video sirva
+        salida.stem, herramienta="YouTube Create", prompt=prompt,
+        estado="generado" if estado == "ok" else estado,
         gancho=gancho, item_id=item_id)
     if estado != "ok":
         return 2

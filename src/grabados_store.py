@@ -426,6 +426,9 @@ def _crear_intentos(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+PROMPT_CORTO = 120  # caracteres: una o dos frases, como los que escribe Lanny
+
+
 class IntentosStore:
     """Cada intento de generar un video con su prompt y su resultado, para saber que
     prompts funcionan. Guarda tambien los que fallan: sin ellos no hay tasa de error."""
@@ -462,6 +465,28 @@ class IntentosStore:
             "ROUND(AVG(movimiento), 1) FROM intentos_video GROUP BY gancho "
             "ORDER BY SUM(estado = 'ok') * 1.0 / COUNT(*) DESC"
         ).fetchall()
+
+    def comparar(self, ventas: dict[int, int]) -> list[tuple[str, int, int, int, int]]:
+        """Por gancho y por herramienta + largo del prompt: intentos, aprobados, con defecto y
+        ventas de los productos aprobados. Sin los cupos agotados ni las pruebas invalidas,
+        que no dicen nada del prompt."""
+        grupos: dict[str, list[int]] = {}
+        contados: set[tuple[str, int]] = set()
+        for herramienta, gancho, prompt, estado, item_id in self._conn.execute(
+            "SELECT herramienta, gancho, prompt, estado, item_id FROM intentos_video "
+            "WHERE estado != 'limite' AND COALESCE(nota, '') NOT LIKE 'PRUEBA INVALIDA%'"
+        ):
+            familia = "YouTube Create" if herramienta.startswith("YouTube") else "Flow"
+            largo = "corto" if len(prompt) <= PROMPT_CORTO else "largo"
+            for clave in (f"gancho {gancho}", f"{familia}, prompt {largo}"):
+                g = grupos.setdefault(clave, [0, 0, 0, 0])
+                g[0] += 1
+                g[1] += estado == "ok"
+                g[2] += estado == "defecto"
+                if estado == "ok" and (clave, item_id) not in contados:
+                    contados.add((clave, item_id))
+                    g[3] += ventas.get(item_id, 0)
+        return sorted(((k, *v) for k, v in grupos.items()), key=lambda f: (not f[0].startswith("gancho"), f[0]))
 
     def defectos(self) -> list[tuple[str, str, str]]:
         return self._conn.execute(
