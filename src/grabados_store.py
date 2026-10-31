@@ -408,3 +408,52 @@ class PublicacionesStore:
         fila = self._conn.execute(
             "SELECT valor FROM credencial WHERE nombre = ?", (nombre,)).fetchone()
         return fila[0] if fila else None
+
+
+class IntentosStore:
+    """Cada intento de generar un video con su prompt y su resultado, para saber que
+    prompts funcionan. Guarda tambien los que fallan: sin ellos no hay tasa de error."""
+
+    def __init__(self, db_path: str | Path):
+        self._conn = sqlite3.connect(str(db_path))
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS intentos_video ("
+            "id INTEGER PRIMARY KEY, ts REAL NOT NULL, nombre TEXT NOT NULL, item_id INTEGER, "
+            "herramienta TEXT NOT NULL, gancho TEXT NOT NULL, prompt TEXT NOT NULL, "
+            "estado TEXT NOT NULL, nota TEXT, movimiento REAL)"
+        )
+        self._conn.commit()
+
+    def registrar(self, nombre: str, *, herramienta: str, prompt: str, estado: str,
+                  gancho: str = "sin gancho", item_id: int | None = None,
+                  now: float | None = None) -> None:
+        self._conn.execute(
+            "INSERT INTO intentos_video (ts, nombre, item_id, herramienta, gancho, prompt, estado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (time.time() if now is None else now, nombre, item_id, herramienta, gancho, prompt, estado),
+        )
+        self._conn.commit()
+
+    def marcar(self, nombre: str, estado: str, *, nota: str = "",
+               movimiento: float | None = None) -> bool:
+        """Resultado del control final, sobre el ultimo intento con ese nombre."""
+        cur = self._conn.execute(
+            "UPDATE intentos_video SET estado = ?, nota = ?, movimiento = ? WHERE id = "
+            "(SELECT MAX(id) FROM intentos_video WHERE nombre = ?)",
+            (estado, nota, movimiento, nombre),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def informe(self) -> list[tuple[str, int, int, int, float | None]]:
+        """Por gancho: intentos, aprobados, con defecto y movimiento promedio de los medidos."""
+        return self._conn.execute(
+            "SELECT gancho, COUNT(*), SUM(estado = 'ok'), SUM(estado = 'defecto'), "
+            "ROUND(AVG(movimiento), 1) FROM intentos_video GROUP BY gancho "
+            "ORDER BY SUM(estado = 'ok') * 1.0 / COUNT(*) DESC"
+        ).fetchall()
+
+    def defectos(self) -> list[tuple[str, str, str]]:
+        return self._conn.execute(
+            "SELECT nombre, nota, prompt FROM intentos_video WHERE estado = 'defecto' ORDER BY id"
+        ).fetchall()

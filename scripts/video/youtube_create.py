@@ -23,6 +23,10 @@ from pathlib import Path
 import uiautomator2 as u2
 
 RAIZ = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(RAIZ))
+
+from src.grabados_store import IntentosStore  # noqa: E402
+
 CAPTURAS = RAIZ / "logs" / "youtube_create"
 PAQUETE = "com.google.android.apps.youtube.producer"
 
