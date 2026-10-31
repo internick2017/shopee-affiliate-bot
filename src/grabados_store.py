@@ -486,7 +486,8 @@ class IntentosStore:
                 if estado == "ok" and (clave, item_id) not in contados:
                     contados.add((clave, item_id))
                     g[3] += ventas.get(item_id, 0)
-        return sorted(((k, *v) for k, v in grupos.items()), key=lambda f: (not f[0].startswith("gancho"), f[0]))
+        filas = [(k, v[0], v[1], v[2], v[3]) for k, v in grupos.items()]
+        return sorted(filas, key=lambda f: (not f[0].startswith("gancho"), f[0]))
 
     def defectos(self) -> list[tuple[str, str, str]]:
         return self._conn.execute(
