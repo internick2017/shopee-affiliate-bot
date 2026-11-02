@@ -15,6 +15,10 @@ El post es solo texto con el link: WhatsApp arma solo la vista previa con la fot
 El envio va por el celular de Nick (Galaxy A07, su numero publica en el grupo) con
 uiautomator2, igual que el publicador de Shopee Video. Comparten el celular, asi
 que comparten el candado `logs/publicador.lock`.
+
+Si el celular no puede, el respaldo es WhatsApp Web en el Chrome de esta PC, manejado
+por una sesion de Claude (skill cola-whatsapp-chrome): `para_navegador` decide que post
+le toca y `ColaStore.reservar` impide que el celular y el navegador manden el mismo.
 """
 
 from __future__ import annotations
@@ -69,6 +73,10 @@ NO_CASA = ("pneu", "pneus", "automotivo", "automotiva", "automotivos", "veicular
 # Si el celular se toco hace menos que esto, alguien lo esta usando (a mano u otra
 # automatizacion): no se le abre WhatsApp encima.
 EN_USO_MS = 30 * 1000
+# Regla de Nick: a las 21:00 ya no sale nada, por ningun camino, aunque una corrida se atrase.
+FIN_DE_ENVIOS = "21:00"
+# Antes de esto el post sigue siendo del celular: su proxima corrida lo puede mandar.
+ATRASO_NAVEGADOR = dt.timedelta(minutes=5)
 # Lo vendido por WhatsApp en 89 dias fue de R$ 9,90 a R$ 109,99 (mediana R$ 29,90):
 # una impresora o un tablet no es lo que este grupo compra.
 PRECIO_MAXIMO = Decimal("120")
@@ -275,6 +283,23 @@ def a_enviar(cola: list[Envio], ahora: dt.datetime) -> tuple[Envio | None, list[
     return vencidos[-1], vencidos[:-1]
 
 
+def en_horario(ahora: dt.datetime) -> bool:
+    """Lunes a sabado, de 8:00 a antes de las 21:00."""
+    return (ahora.weekday() in RUBRO_DEL_DIA
+            and f"{PRIMERA_HORA:02d}:00" <= ahora.strftime("%H:%M") < FIN_DE_ENVIOS)
+
+
+def para_navegador(cola: list[Envio], ahora: dt.datetime) -> Envio | None:
+    """El post que el navegador puede tomar: el que toca, si ya lleva ATRASO_NAVEGADOR
+    de atraso. Con otro post "enviando" no toma nada: el celular puede estar mandandolo."""
+    if not en_horario(ahora) or any(e.estado == "enviando" for e in cola):
+        return None
+    toca, _ = a_enviar(cola, ahora)
+    if toca is None or ahora - dt.datetime.fromisoformat(f"{toca.fecha} {toca.hora}") < ATRASO_NAVEGADOR:
+        return None
+    return toca
+
+
 # ------------------------------------------------------------------ registro
 
 
@@ -317,10 +342,23 @@ class ColaStore:
         self._db.commit()
         e.estado, e.enviado_ts = estado, ts
 
+    def reservar(self, e: Envio) -> bool:
+        """Pasa el post de pendiente a enviando; False si otro camino ya lo tomo. El
+        horario queda anotado para que el otro camino respete la separacion entre posts."""
+        ts = time.time()
+        tomado = self._db.execute(
+            "UPDATE envios SET estado = 'enviando', enviado_ts = ? "
+            "WHERE fecha = ? AND hora = ? AND estado = 'pendiente'", (ts, e.fecha, e.hora)).rowcount == 1
+        self._db.commit()
+        if tomado:
+            e.estado, e.enviado_ts = "enviando", ts
+        return tomado
+
     def ultimo_envio(self, fecha: dt.date) -> float | None:
         """Cuando salio el ultimo post del dia (epoch), para no mandar dos seguidos."""
-        fila = self._db.execute("SELECT MAX(enviado_ts) FROM envios WHERE fecha = ? AND estado = 'enviado'",
-                                (fecha.isoformat(),)).fetchone()
+        fila = self._db.execute(
+            "SELECT MAX(enviado_ts) FROM envios WHERE fecha = ? AND estado IN ('enviado', 'enviando')",
+            (fecha.isoformat(),)).fetchone()
         return fila[0] if fila else None
 
     def reemplazar(self, e: Envio, titulo: str, texto: str, item_id: int | None = None) -> None:
@@ -403,6 +441,7 @@ class WhatsApp:
     def __init__(self, d: Any, pasos: Any):
         self.d = d
         self.pasos = pasos
+        self.envio_tocado = False  # True desde que se toca Enviar: el post pudo haber salido
 
     @classmethod
     def conectar(cls, pasos: Any, serial: str | None = None) -> WhatsApp:
@@ -472,12 +511,16 @@ class WhatsApp:
             caja.clear_text()
             self.d.press("back")
             return
-        self.d(resourceId=f"{PAQUETE}:id/send").click()
+        self._tocar_enviar()
         time.sleep(3)
         self.pasos.foto(self.d, "despues_de_enviar")
         if caja.get_text() == texto:
             raise EnvioAbortado("Despues de Enviar el texto sigue en la caja")
         self.d.press("back")
+
+    def _tocar_enviar(self) -> None:
+        self.envio_tocado = True
+        self.d(resourceId=f"{PAQUETE}:id/send").click()
 
     def _descartar_foto(self) -> None:
         """Salir del editor sin mandar: WhatsApp pregunta "Deseja descartar a foto?"."""
@@ -536,7 +579,7 @@ class WhatsApp:
         if not enviar:
             self._descartar_foto()
             return
-        self.d(resourceId=f"{PAQUETE}:id/send").click()
+        self._tocar_enviar()
         time.sleep(4)
         self.pasos.foto(self.d, "foto_enviada")
         # 2026-10-29 17:15: la foto salio sin leyenda aunque la captura previa la mostraba.
@@ -560,6 +603,6 @@ class WhatsApp:
         if caja.get_text() != texto:
             caja.clear_text()
             raise EnvioAbortado("El texto no quedo entero en la caja")
-        self.d(resourceId=f"{PAQUETE}:id/send").click()
+        self._tocar_enviar()
         time.sleep(3)
         self.pasos.foto(self.d, "texto_suelto_enviado")

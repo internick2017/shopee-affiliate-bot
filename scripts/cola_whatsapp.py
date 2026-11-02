@@ -6,11 +6,16 @@ Uso (desde la raiz del repo):
     python scripts/cola_whatsapp.py armar             # arma y guarda la de hoy (si ya existe, no hace nada)
     python scripts/cola_whatsapp.py enviar            # en seco: abre el grupo, escribe y NO manda
     python scripts/cola_whatsapp.py enviar --enviar   # manda de verdad el post que toca
+    python scripts/cola_whatsapp.py tomar-navegador   # respaldo: reserva el post atrasado y lo muestra en JSON
+    python scripts/cola_whatsapp.py cerrar-navegador --hora 15:06 --estado enviado
 
 La tarea programada ColaWhatsApp corre `enviar --enviar` cada 5 minutos de lunes a
 sabado; `enviar` arma la cola del dia si todavia no existe. Registro en
 logs/cola_whatsapp.log, capturas en logs/cola_whatsapp/<fecha-hora>/, y la cola con
 lo mandado en cola_whatsapp.db.
+
+tomar-navegador y cerrar-navegador los usa la skill cola-whatsapp-chrome: Claude manda
+el post por WhatsApp Web en el Chrome de esta PC cuando el celular no puede.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import io
+import json
 import msvcrt
 import os
 import sys
@@ -38,6 +44,8 @@ from src.cola_whatsapp import (  # noqa: E402
     WhatsApp,
     a_enviar,
     armar_cola,
+    en_horario,
+    para_navegador,
     reemplazo,
 )
 from src.logging_setup import configurar_logging  # noqa: E402
@@ -106,10 +114,48 @@ def tomar_celular(log):
             time.sleep(30)
 
 
+def tomar_navegador(store: ColaStore, hoy: dt.date, log) -> dict | None:
+    """Reserva el post atrasado para mandarlo por WhatsApp Web; None si no hay ninguno.
+    Un horario de ML va con su respaldo de Shopee."""
+    cola = cola_de_hoy(store, hoy, guardar=True)
+    ahora = dt.datetime.now()
+    toca = para_navegador(cola, ahora)
+    if toca is None:
+        return None
+    ultimo = store.ultimo_envio(hoy)
+    if ultimo and time.time() - ultimo < SEPARACION_MINIMA:
+        log.info("Navegador: espero para %s, el ultimo post salio hace poco.", toca.hora)
+        return None
+    _, viejos = a_enviar(cola, ahora)
+    if not store.reservar(toca):
+        return None
+    for e in viejos:
+        store.marcar(e, "vencido")
+    log.info("Navegador: tomo %s %s", toca.hora, toca.titulo)
+    foto = bajar_foto(toca.item_id, os.getenv("SHOPEE_APP_ID", ""), os.getenv("SHOPEE_SECRET", ""),
+                      RAIZ / "logs" / "cola_whatsapp" / "navegador")
+    return {"fecha": toca.fecha, "hora": toca.hora, "titulo": toca.titulo, "texto": toca.texto,
+            "foto": str(foto) if foto else None}
+
+
+def cerrar_navegador(store: ColaStore, hoy: dt.date, hora: str, estado: str, log) -> int:
+    """Registra como termino un post tomado por el navegador."""
+    e = next((x for x in store.del_dia(hoy) if x.hora == hora and x.estado == "enviando"), None)
+    if e is None:
+        log.error("Navegador: no hay un post enviando a las %s", hora)
+        return 1
+    store.marcar(e, estado)
+    log.info("Navegador: %s quedo %s (%s)", hora, estado, e.titulo)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("accion", choices=["ver", "armar", "enviar"])
+    ap.add_argument("accion", choices=["ver", "armar", "enviar", "tomar-navegador", "cerrar-navegador"])
     ap.add_argument("--enviar", action="store_true", help="mandar de verdad (sin esto, en seco)")
+    ap.add_argument("--hora", help="cerrar-navegador: el horario que devolvio tomar-navegador")
+    ap.add_argument("--estado", choices=["enviado", "pendiente", "sin_foto", "fallido"],
+                    help="cerrar-navegador: como termino el post")
     args = ap.parse_args()
 
     load_dotenv(RAIZ / ".env")
@@ -123,6 +169,15 @@ def main() -> int:
         for e in cola_de_hoy(store, hoy, guardar=False):
             print(f"{e.hora} [{e.rubro}] {e.estado}  {e.titulo[:70]}")
         return 0
+
+    if args.accion == "tomar-navegador":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        print(json.dumps(tomar_navegador(store, hoy, log), ensure_ascii=False))
+        return 0
+    if args.accion == "cerrar-navegador":
+        if not args.hora or not args.estado:
+            ap.error("cerrar-navegador necesita --hora y --estado")
+        return cerrar_navegador(store, hoy, args.hora, args.estado, log)
 
     cola = cola_de_hoy(store, hoy, guardar=True)
     if args.accion == "armar":
@@ -153,13 +208,20 @@ def main() -> int:
     if candado is None:
         return 0
     if args.enviar:
+        # La espera del candado puede haber cruzado las 21:00.
+        if not en_horario(dt.datetime.now()):
+            log.info("No mando %s: fuera de horario.", toca.hora)
+            return 0
         # "enviando" no lo vuelve a elegir `a_enviar`: si la corrida se cae despues de
         # mandar, no sale dos veces. Lo que no llego a mandarse vuelve a "pendiente".
-        store.marcar(toca, "enviando")
+        if not store.reservar(toca):
+            log.info("%s ya lo tomo el navegador.", toca.hora)
+            return 0
     pasos = Pasos(RAIZ / "logs" / "cola_whatsapp" / time.strftime("%Y%m%d-%H%M%S"))
     app, sec = os.getenv("SHOPEE_APP_ID", ""), os.getenv("SHOPEE_SECRET", "")
     hooks = HookBank.from_file(RAIZ / "hooks.txt")
     probados = {e.item_id for e in cola} | store.de_la_semana(hoy)
+    wa = None
     try:
         wa = WhatsApp.conectar(pasos)
         for intento in range(MAX_REEMPLAZOS + 1):
@@ -210,10 +272,11 @@ def main() -> int:
             store.marcar(toca, "fallido")
         return 1
     except Exception:
-        # Celular desconectado, ADB caido: el post queda pendiente para la proxima.
+        # Celular desconectado, ADB caido: el post queda pendiente para la proxima. Si la
+        # conexion se corto despues de tocar Enviar, pudo haber salido: no se reintenta.
         log.exception("No pude manejar el celular para %s", toca.hora)
         if args.enviar:
-            store.marcar(toca, "pendiente")
+            store.marcar(toca, "fallido" if wa and wa.envio_tocado else "pendiente")
         return 1
     if args.enviar:
         if ml is not None:

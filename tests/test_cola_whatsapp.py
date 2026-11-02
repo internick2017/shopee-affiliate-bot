@@ -10,7 +10,9 @@ from src.cola_whatsapp import (
     a_enviar,
     armar_cola,
     corrida,
+    en_horario,
     en_uso,
+    para_navegador,
     plan_del_dia,
     reemplazo,
     sirve,
@@ -275,3 +277,82 @@ def test_falta_leyenda_si_el_link_no_aparece_en_el_chat():
     d.return_value.wait.return_value = True
     assert not wa.falta_leyenda(texto)
     assert not wa.falta_leyenda("sin link")
+
+
+def envio(hora, estado="pendiente"):
+    return Envio("2026-11-02", hora, "hogar", int(hora.replace(":", "")), "Titulo", "texto", estado)
+
+
+def test_para_navegador_recien_con_cinco_minutos_de_atraso():
+    # 2026-11-02: el post de las 14:14 salio a las 14:40 porque se corto el celular.
+    cola = [envio("14:14")]
+    assert para_navegador(cola, dt.datetime(2026, 11, 2, 14, 18)) is None
+    assert para_navegador(cola, dt.datetime(2026, 11, 2, 14, 19)) is cola[0]
+
+
+def test_para_navegador_toma_el_ultimo_vencido():
+    cola = [envio("14:14"), envio("14:44")]
+    assert para_navegador(cola, dt.datetime(2026, 11, 2, 14, 50)) is cola[1]
+
+
+def test_para_navegador_no_pisa_al_celular_que_esta_enviando():
+    cola = [envio("14:14", "enviando"), envio("14:44")]
+    assert para_navegador(cola, dt.datetime(2026, 11, 2, 14, 55)) is None
+
+
+def test_nada_desde_las_21_ni_el_domingo():
+    assert en_horario(dt.datetime(2026, 11, 2, 20, 59))
+    assert not en_horario(dt.datetime(2026, 11, 2, 21, 0))
+    assert not en_horario(dt.datetime(2026, 11, 2, 7, 59))
+    assert not en_horario(dt.datetime(2026, 11, 1, 12, 0))
+    assert para_navegador([envio("20:45")], dt.datetime(2026, 11, 2, 21, 0)) is None
+
+
+def test_reservar_solo_deja_pasar_a_uno(tmp_path):
+    # El celular espera el candado con el post en memoria mientras el navegador lo toma.
+    store = ColaStore(tmp_path / "c.db")
+    store.guardar([envio("14:14")])
+    navegador, celular = store.del_dia(dt.date(2026, 11, 2))[0], envio("14:14")
+    assert store.reservar(navegador)
+    assert not store.reservar(celular)
+
+
+def test_reservar_cuenta_para_la_separacion_entre_posts(tmp_path):
+    store = ColaStore(tmp_path / "c.db")
+    hoy = dt.date(2026, 11, 2)
+    e = envio("14:14")
+    store.guardar([e])
+    store.reservar(e)
+    assert store.ultimo_envio(hoy) is not None
+    store.marcar(e, "pendiente")
+    assert store.ultimo_envio(hoy) is None
+
+
+def test_corte_de_conexion_al_tocar_enviar_queda_marcado():
+    # Si se corta justo ahi el post pudo salir: no debe volver a pendiente.
+    from http.client import RemoteDisconnected
+    from unittest.mock import MagicMock
+
+    import pytest
+
+    from src.cola_whatsapp import WhatsApp
+
+    d = MagicMock()
+    d.return_value.get_text.return_value = "texto"
+    d.return_value.click.side_effect = RemoteDisconnected()
+    wa = WhatsApp(d, MagicMock())
+    with pytest.raises(RemoteDisconnected):
+        wa.mandar("texto", enviar=True)
+    assert wa.envio_tocado
+
+
+def test_en_seco_no_cuenta_como_envio_tocado():
+    from unittest.mock import MagicMock
+
+    from src.cola_whatsapp import WhatsApp
+
+    d = MagicMock()
+    d.return_value.get_text.return_value = "texto"
+    wa = WhatsApp(d, MagicMock())
+    wa.mandar("texto", enviar=False)
+    assert not wa.envio_tocado
