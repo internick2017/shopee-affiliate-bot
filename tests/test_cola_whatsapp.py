@@ -296,8 +296,20 @@ def test_para_navegador_toma_el_ultimo_vencido():
 
 
 def test_para_navegador_no_pisa_al_celular_que_esta_enviando():
-    cola = [envio("14:14", "enviando"), envio("14:44")]
-    assert para_navegador(cola, dt.datetime(2026, 11, 2, 14, 55)) is None
+    ahora = dt.datetime(2026, 11, 2, 14, 55)
+    celular = envio("14:14", "enviando")
+    celular.enviado_ts = ahora.timestamp() - 60
+    cola = [celular, envio("14:44")]
+    assert para_navegador(cola, ahora) is None
+
+
+def test_para_navegador_no_lo_frena_una_corrida_muerta():
+    # 2026-11-02: la corrida murio con el post de las 16:30 reservado.
+    ahora = dt.datetime(2026, 11, 2, 17, 30)
+    muerto = envio("16:30", "enviando")
+    muerto.enviado_ts = ahora.timestamp() - 21 * 60
+    cola = [muerto, envio("17:07")]
+    assert para_navegador(cola, ahora) is cola[1]
 
 
 def test_nada_desde_las_21_ni_el_domingo():
