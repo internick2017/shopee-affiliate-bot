@@ -77,6 +77,8 @@ EN_USO_MS = 30 * 1000
 FIN_DE_ENVIOS = "21:00"
 # Antes de esto el post sigue siendo del celular: su proxima corrida lo puede mandar.
 ATRASO_NAVEGADOR = dt.timedelta(minutes=5)
+# Una reserva mas vieja que esto es de una corrida muerta: la tarea corta a los 15 minutos.
+RESERVA_VIVA = 20 * 60
 # Lo vendido por WhatsApp en 89 dias fue de R$ 9,90 a R$ 109,99 (mediana R$ 29,90):
 # una impresora o un tablet no es lo que este grupo compra.
 PRECIO_MAXIMO = Decimal("120")
@@ -291,8 +293,11 @@ def en_horario(ahora: dt.datetime) -> bool:
 
 def para_navegador(cola: list[Envio], ahora: dt.datetime) -> Envio | None:
     """El post que el navegador puede tomar: el que toca, si ya lleva ATRASO_NAVEGADOR
-    de atraso. Con otro post "enviando" no toma nada: el celular puede estar mandandolo."""
-    if not en_horario(ahora) or any(e.estado == "enviando" for e in cola):
+    de atraso. Con una reserva viva no toma nada: el celular puede estar mandando ese post.
+    La de una corrida muerta no frena el respaldo, y su post no se reintenta: pudo haber salido."""
+    if not en_horario(ahora) or any(
+            e.estado == "enviando" and ahora.timestamp() - (e.enviado_ts or 0) < RESERVA_VIVA
+            for e in cola):
         return None
     toca, _ = a_enviar(cola, ahora)
     if toca is None or ahora - dt.datetime.fromisoformat(f"{toca.fecha} {toca.hora}") < ATRASO_NAVEGADOR:
