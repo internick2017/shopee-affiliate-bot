@@ -2,13 +2,17 @@
 producto que muestra la app es el registrado."""
 
 import pytest
+from PIL import Image, ImageDraw
 
 from src import publicador_celular
 from src.grabados_store import VideosStore
 from src.publicador_celular import (
+    MAX_DIFERENCIA_MINIATURA,
+    ZONA_MINIATURA,
     Celular,
     PublicacionAbortada,
     bloqueado,
+    diferencia_miniatura,
     elegir_producto,
     es_verde,
     normalizar,
@@ -169,3 +173,35 @@ def test_postar_sin_aviso_no_toca_nada_de_mas(monkeypatch):
     celular, pantalla = _celular(monkeypatch, set())
     celular.postar(aceptar_aviso=True)
     assert pantalla.toques == ["Postar"]
+
+
+def _cuadro_de_video():
+    cuadro = Image.new("RGB", (720, 1280), (20, 90, 200))
+    ImageDraw.Draw(cuadro).rectangle((0, 760, 720, 1280), fill=(230, 180, 40))
+    return cuadro
+
+
+def _pantalla_con(miniatura):
+    izq, arriba, der, abajo = ZONA_MINIATURA
+    pantalla = Image.new("RGB", (720, 1600), "white")
+    pantalla.paste(miniatura.resize((der - izq, abajo - arriba)), (izq, arriba))
+    return pantalla
+
+
+def test_la_miniatura_del_video_correcto_pasa():
+    cuadro = _cuadro_de_video()
+    centro = cuadro.crop((0, 160, 720, 1120))
+    assert diferencia_miniatura(_pantalla_con(centro), cuadro) < MAX_DIFERENCIA_MINIATURA
+
+
+def test_una_foto_que_entro_a_la_galeria_no_pasa():
+    comprobante = Image.new("RGB", (720, 960), (225, 230, 230))
+    assert diferencia_miniatura(_pantalla_con(comprobante), _cuadro_de_video()) > MAX_DIFERENCIA_MINIATURA
+
+
+def test_verificar_video_aborta_si_la_miniatura_es_otra(monkeypatch, tmp_path):
+    celular, pantalla = _celular(monkeypatch, set())
+    pantalla.screenshot = lambda: _pantalla_con(Image.new("RGB", (720, 960), (225, 230, 230)))
+    monkeypatch.setattr(publicador_celular, "primer_cuadro", lambda v: _cuadro_de_video())
+    with pytest.raises(PublicacionAbortada, match="miniatura"):
+        celular.verificar_video(tmp_path / "video.mp4")

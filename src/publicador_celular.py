@@ -24,14 +24,20 @@ tests. La que toca la pantalla vive en `Celular` y se prueba en vivo.
 
 from __future__ import annotations
 
+import io
 import logging
 import random
 import re
+import subprocess
 import time
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import imageio_ffmpeg
+import numpy as np
+from PIL import Image
 
 from .grabados_store import VideoProducido, VideosStore
 
@@ -42,6 +48,10 @@ CARPETA_CELULAR = "/sdcard/DCIM/ShopeeBot"
 CARPETA_VIDEOS = Path(__file__).resolve().parent.parent / "videos_entregados" / "shopee-video-flow"
 # Decision de Nick (2026-10-15): 4 o 5 por dia. Mas que eso empieza a parecer robot.
 TOPE_DIARIO = 5
+# Miniatura del video en "Adicionar legenda" (izquierda, arriba, derecha, abajo).
+ZONA_MINIATURA = (30, 178, 218, 430)
+# Medido 2026-11-02 con 4 posts reales: el video correcto da 5 a 9; otro video o una foto, 58 o mas.
+MAX_DIFERENCIA_MINIATURA = 30
 
 
 class PublicacionAbortada(RuntimeError):
@@ -73,6 +83,34 @@ def elegir_producto(titulo: str, candidatos: list[str]) -> int | None:
         if len(c) >= 20 and (c.startswith(buscado) or buscado.startswith(c)):
             return i
     return None
+
+
+def diferencia_miniatura(pantalla: Image.Image, cuadro: Image.Image) -> float:
+    """Cuanto difiere la miniatura de la pantalla del primer cuadro del video (0 a 255).
+
+    La miniatura muestra el centro del video en 3:4; el boton de play y la franja
+    "Selecionar Capa" que la app le pone encima no cuentan."""
+    izq, arriba, der, abajo = ZONA_MINIATURA
+    ancho, alto = cuadro.size
+    alto_visible = min(alto, ancho * (abajo - arriba) // (der - izq))
+    y = (alto - alto_visible) // 2
+    medida = (47, 63)
+    mini = pantalla.convert("RGB").crop(ZONA_MINIATURA).resize(medida)
+    ref = cuadro.convert("RGB").crop((0, y, ancho, y + alto_visible)).resize(medida)
+    resta = np.abs(np.asarray(mini, dtype=float) - np.asarray(ref, dtype=float)).mean(axis=2)
+    cuenta = np.ones((medida[1], medida[0]), dtype=bool)
+    cuenta[50:] = False
+    cuenta[20:42, 12:35] = False
+    return float(resta[cuenta].mean())
+
+
+def primer_cuadro(video: Path) -> Image.Image:
+    salida = subprocess.run(
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-i", str(video), "-frames:v", "1",
+         "-f", "image2pipe", "-c:v", "png", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return Image.open(io.BytesIO(salida))
 
 
 def es_verde(r: int, g: int, b: int) -> bool:
@@ -199,8 +237,13 @@ class Celular:
         if pagina_directa:
             time.sleep(5)
         else:
-            primeras = " ".join(titulo.split()[:4])
-            self._tocar(primeras, espera=30, contiene=True)
+            # Regex con \s+: hay titulos con espacios dobles ("Caderneta  tipo", 2026-11-03).
+            palabras = titulo.split()[:4]
+            sel = self.d(textMatches="(?s).*" + r"\s+".join(map(re.escape, palabras)) + ".*")
+            if not sel.wait(timeout=30):
+                self.pasos.foto(self.d, "falta_titulo")
+                raise PublicacionAbortada(f"No aparecio {' '.join(palabras)!r}")
+            sel.click()
         if not self.d(textContains="Quantidade").wait(timeout=20):
             log.info("No vi 'Quantidade': sigo, la pagina puede variar por producto")
         self.pasos.foto(self.d, "pagina_producto")
@@ -233,6 +276,15 @@ class Celular:
         if not self.d(text="Adicionar legenda").wait(timeout=30):
             self.pasos.foto(self.d, "sin_pantalla_legenda")
             raise PublicacionAbortada("No llego a la pantalla 'Adicionar legenda'")
+
+    def verificar_video(self, video: Path) -> None:
+        """La primera celda de la galeria es lo ultimo que entro al celular, y por
+        WhatsApp entran fotos personales: el 2026-11-02 casi sale un comprobante de pago."""
+        diferencia = diferencia_miniatura(self.d.screenshot(), primer_cuadro(video))
+        log.info("Miniatura contra %s: diferencia %.1f", video.name, diferencia)
+        if diferencia > MAX_DIFERENCIA_MINIATURA:
+            self.pasos.foto(self.d, "video_no_coincide")
+            raise PublicacionAbortada(f"La miniatura no es {video.name} (diferencia {diferencia:.0f})")
 
     def verificar_producto(self, titulo: str) -> None:
         """Ultima barrera antes de postar: el producto vinculado tiene que ser el
@@ -308,10 +360,12 @@ def publicar(
     Devuelve True solo si publico y lo marco como publicado."""
     assert video.legenda is not None  # siguiente_video ya lo garantiza
     celular.verificar_desbloqueado()
-    celular.copiar_video(ruta_video(video.archivo, carpeta))
+    ruta = ruta_video(video.archivo, carpeta)
+    celular.copiar_video(ruta)
     celular.abrir_producto(video.link, video.titulo, pagina_directa=pagina_directa)
     celular.ir_a_shopee_video()
     celular.elegir_primer_video()
+    celular.verificar_video(ruta)  # sin excepcion: lo que sale publicado no se puede recuperar
     if verificar:  # solo se salta si Nick confirmo a mano que el producto es el correcto
         celular.verificar_producto(video.titulo)
     celular.escribir_legenda(video.legenda)
