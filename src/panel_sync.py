@@ -123,19 +123,22 @@ def leer_conversiones(
     hasta: int,
     http_post: Callable[..., object] | None = None,
     pausa: float = _PAUSA,
+    por: str = "purchaseTime",
+    campos: str = _CAMPOS,
 ) -> tuple[list[dict], str | None]:
     """Todos los nodos de `conversionReport` entre `desde` y `hasta` (epoch), pagina
     por pagina. Si una pagina falla devuelve lo leido hasta ahi y el error: lo
-    leido sirve igual (el upsert es idempotente), pero la corrida no fue completa."""
+    leido sirve igual (el upsert es idempotente), pero la corrida no fue completa.
+    `por` elige la fecha del filtro: `completeTime` es la que usa la factura mensual."""
     kwargs: dict[str, Any] = {"http_post": http_post} if http_post is not None else {}
     nodos: list[dict] = []
     scroll: str | None = None
     pagina = 1
     while True:
-        args = f"purchaseTimeStart:{desde},purchaseTimeEnd:{hasta},limit:{_POR_PAGINA}"
+        args = f"{por}Start:{desde},{por}End:{hasta},limit:{_POR_PAGINA}"
         if scroll:
             args += f',scrollId:"{scroll}"'
-        data = _graphql_call(app_id, secret, f"{{conversionReport({args}){{{_CAMPOS}}}}}",
+        data = _graphql_call(app_id, secret, f"{{conversionReport({args}){{{campos}}}}}",
                              **kwargs)
         if data is None:
             return nodos, f"La API de Shopee no respondio (pagina {pagina})"
