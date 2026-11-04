@@ -11,6 +11,7 @@ Uso:
     python cupo.py registrar "Flow Music" sugarysalamander --creditos 125
     python cupo.py hoy                  # cuenta por herramienta y cuenta
     python cupo.py hoy --fecha 2026-10-24
+    python cupo.py saldo                # cuanto queda hoy de los diarios de cada cuenta de Flow
 
 `--limite` marca que la herramienta rechazo el intento ("Voce alcancou o limite"):
 no cuenta como generacion, pero fija cuantas entraron antes de que cortara. Asi,
@@ -22,10 +23,46 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ARCHIVO = Path(__file__).resolve().parents[2] / "cupo_diario.jsonl"
+
+# Creditos diarios de Flow por cuenta y hora en que se renuevan (leidas en el menu de cuenta).
+# Mapa completo de cuentas: vault, 10-projects/bot-afiliados/mapa-cuentas-flow-create.md.
+# shortcut: las Pro no muestran la hora de sus 50 diarios; se asume 00:00 hasta medirla.
+DIARIOS = {
+    "internick2017": (50, "00:00"),
+    "nick.inkaweb": (50, "00:00"),
+    "nickgranados01": (50, "00:00"),
+    "nick.daniel@apikiwp": (50, "20:10"),
+    "marketing.aresmkt": (50, "01:43"),
+    "setupjustobr": (50, "01:14"),
+}
+
+
+def ultima_renovacion(hora: str, ahora: datetime) -> datetime:
+    h, m = map(int, hora.split(":"))
+    r = ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+    return r if r <= ahora else r - timedelta(days=1)
+
+
+def saldos(filas: list[dict], ahora: datetime) -> dict[str, tuple[int, int]]:
+    """Por cuenta: (gastado desde su ultima renovacion, lo que queda de los diarios)."""
+    out = {}
+    for cuenta, (diario, hora) in DIARIOS.items():
+        desde = ultima_renovacion(hora, ahora)
+        gastado = sum(f["creditos"] or 0 for f in filas
+                      if f["cuenta"] == cuenta and f["herramienta"] == "Flow" and not f["limite"]
+                      and desde <= datetime.fromisoformat(f["ts"]) <= ahora)
+        out[cuenta] = (gastado, max(diario - gastado, 0))
+    return out
+
+
+def todas() -> list[dict]:
+    if not ARCHIVO.exists():
+        return []
+    return [json.loads(linea) for linea in ARCHIVO.read_text(encoding="utf-8").splitlines() if linea.strip()]
 
 
 def registrar(herramienta: str, cuenta: str, *, limite: bool = False,
@@ -82,10 +119,16 @@ def main() -> None:
     r.add_argument("--nota", default="")
     h = sub.add_parser("hoy")
     h.add_argument("--fecha", default=datetime.now().strftime("%Y-%m-%d"))
+    sub.add_parser("saldo")
     a = p.parse_args()
     if a.cmd == "registrar":
         registrar(a.herramienta, a.cuenta, limite=a.limite, creditos=a.creditos, nota=a.nota)
         print(resumen(datetime.now().strftime("%Y-%m-%d")))
+    elif a.cmd == "saldo":
+        ahora = datetime.now()
+        print("Flow, creditos diarios (gastado / queda; renueva):")
+        for cuenta, (gastado, queda) in saldos(todas(), ahora).items():
+            print(f"  {cuenta}: {gastado} / {queda}  (renueva {DIARIOS[cuenta][1]})")
     else:
         print(resumen(a.fecha))
 

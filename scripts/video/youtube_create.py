@@ -64,8 +64,8 @@ def diferencia_miniatura(captura: Path, imagen: Path) -> float:
     x, y = (w - lado) // 2, (h - lado) // 2
     borde = lado // 20
     ref = img.crop((x + borde, y + borde, x + lado - borde, y + lado - borde)).resize((48, 48))
-    # la miniatura cambia de lugar segun la cuenta: interfaz vieja e interfaz nueva
-    zonas = ((60, 1165, 225, 1330), (40, 1025, 170, 1155))
+    # la miniatura cambia de lugar segun la cuenta y el largo del prompt
+    zonas = ((60, 1165, 225, 1330), (40, 1025, 170, 1155), (35, 1095, 175, 1235), (35, 980, 175, 1125), (30, 1052, 180, 1202))
     minis = (pantalla.crop(z).resize((48, 48)) for z in zonas)
     return min(sum(ImageStat.Stat(ImageChops.difference(m, ref)).mean) / 3 for m in minis)
 
