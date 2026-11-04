@@ -62,7 +62,7 @@ def saldos(filas: list[dict], ahora: datetime) -> dict[str, tuple[int, int]]:
 def todas() -> list[dict]:
     if not ARCHIVO.exists():
         return []
-    return [json.loads(l) for l in ARCHIVO.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [json.loads(linea) for linea in ARCHIVO.read_text(encoding="utf-8").splitlines() if linea.strip()]
 
 
 def registrar(herramienta: str, cuenta: str, *, limite: bool = False,
