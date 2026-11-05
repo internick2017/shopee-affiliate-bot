@@ -112,6 +112,16 @@ def test_archivo_guardado_sin_carpeta_se_busca_en_entregados(tmp_path, mp4):
     assert resolver_archivo(video("otro.mp4"), tmp_path).archivo == "otro.mp4"
 
 
+def test_archivo_en_subcarpeta_gana_al_suelto_con_el_mismo_nombre(tmp_path):
+    # 2026-11-05: el viejo caixinhas rechazado seguia suelto en la raiz y casi se sube.
+    (tmp_path / "lanny_por_enviar").mkdir()
+    nuevo = tmp_path / "lanny_por_enviar" / "caja_lanny.mp4"
+    nuevo.write_bytes(b"nuevo")
+    (tmp_path / "caja_lanny.mp4").write_bytes(b"viejo")
+    v = resolver_archivo(video("lanny_por_enviar/caja_lanny.mp4"), tmp_path)
+    assert v.archivo == str(nuevo)
+
+
 def test_video_con_imagen_cortada_no_se_sube(store, mp4):
     with pytest.raises(NoSePublico, match="rehacerlo"):
         publicar(video(mp4), store, generar_link=lambda _: pytest.fail("no"),
