@@ -24,6 +24,7 @@ import argparse
 import datetime as dt
 import io
 import json
+import logging
 import msvcrt
 import os
 import sys
@@ -45,6 +46,7 @@ from src.cola_whatsapp import (  # noqa: E402
     a_enviar,
     armar_cola,
     en_horario,
+    huecos,
     para_navegador,
     reemplazo,
 )
@@ -66,7 +68,8 @@ SEPARACION_MINIMA = 12 * 60
 
 def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
     existente = store.del_dia(hoy)
-    if existente:
+    faltan = huecos(hoy, existente, dt.datetime.now()) if existente and guardar else None
+    if existente and not faltan:
         return existente
     app, sec = os.getenv("SHOPEE_APP_ID", ""), os.getenv("SHOPEE_SECRET", "")
     if not app or not sec:
@@ -77,9 +80,14 @@ def cola_de_hoy(store: ColaStore, hoy: dt.date, *, guardar: bool):
         HookBank.from_file(RAIZ / "hooks.txt"),
         excluir=store.de_la_semana(hoy),
         excluir_familias=store.familias_de_la_semana(hoy),
+        horas=faltan,
     )
     if guardar:
         store.guardar(cola)
+    if faltan:
+        for e in cola:
+            logging.getLogger("cola-whatsapp").info("Hueco de %s relleno: %s", e.hora, e.titulo[:60])
+        return store.del_dia(hoy)
     return cola
 
 

@@ -12,6 +12,7 @@ from src.cola_whatsapp import (
     corrida,
     en_horario,
     en_uso,
+    huecos,
     para_navegador,
     plan_del_dia,
     reemplazo,
@@ -368,3 +369,19 @@ def test_en_seco_no_cuenta_como_envio_tocado():
     wa = WhatsApp(d, MagicMock())
     wa.mandar("texto", enviar=False)
     assert not wa.envio_tocado
+
+
+def test_un_hueco_se_rellena_en_la_media_hora_anterior_y_no_pisa_lo_que_hay():
+    hogar = [idea(1, "Tapete banheiro"), idea(2, "Pote hermetico"), idea(3, "Escova limpeza")]
+    pozos = {b: hogar for b in ("casa", "organizador cozinha", "utensilios cozinha", "limpeza",
+                                "banheiro", "decoracao casa", "lavanderia", "potes",
+                                "cama mesa banho", "organizador")}
+    cola = [Envio("2026-10-28", "18:40", "hogar", 9, "Bico mangueira", "t"),
+            Envio("2026-10-28", "19:07", "hogar", 8, "Rodo", "t")]
+    ahora = dt.datetime(2026, 10, 28, 18, 50)
+    assert huecos(MIERCOLES, cola, ahora) == set()      # 19:00 ya tiene; 19:30 falta mas de media hora
+    assert huecos(MIERCOLES, cola, ahora.replace(minute=59) + dt.timedelta(minutes=1)) == {"19:30"}
+    assert huecos(MIERCOLES, [], dt.datetime(2026, 10, 29, 19, 0)) == set()  # otro dia
+    nuevos = armar_cola(MIERCOLES, buscador(pozos), HookBank(["OI"]), excluir={1}, horas={"20:00"})
+    assert [e.hora[:3] for e in nuevos] == ["20:"]
+    assert nuevos[0].item_id != 1

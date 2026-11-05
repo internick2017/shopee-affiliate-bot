@@ -86,6 +86,10 @@ CASA_E_COZINHA = 100636
 # Cada post sale entre :00 y :15 (o :30 y :45) de su media hora, al azar: el horario
 # cambia todos los dias y entre dos posts nunca hay menos de 15 minutos.
 CORRIMIENTO_MAXIMO = 15
+# Un horario que quedo sin producto se vuelve a buscar en las corridas de la media hora
+# anterior: el 2026-11-04 la API de Shopee estaba caida a las 8:00 y quedaron 8 huecos,
+# todos los de 19:00 a 20:30 incluidos, aunque la API volvio a los minutos.
+VENTANA_HUECO = dt.timedelta(minutes=30)
 
 # Busquedas de cada rubro. Las que son alias de product_ideas.CATEGORIAS buscan por
 # categoria; el resto por palabra clave. Hogar tiene varias para que 22 productos
@@ -206,15 +210,17 @@ def armar_cola(
     excluir: set[int],
     excluir_familias: frozenset[str] = frozenset(),
     azar: random.Random | None = None,
+    horas: set[str] | None = None,
 ) -> list[Envio]:
     """La cola del dia. `buscar(busqueda, excluir)` devuelve ideas ordenadas de
     mejor a peor; aca se reparten entre los horarios sin repetir producto ni
     "tipo" de producto (la familia: dos organizadores de cajon seguidos aburren).
     `excluir_familias` son los tipos ya mandados esta semana.
 
-    Un horario que se queda sin candidato se saltea: mejor un hueco que un repetido."""
+    Un horario que se queda sin candidato se saltea: mejor un hueco que un repetido.
+    `horas` limita el armado a esos horarios base (para rellenar huecos)."""
     azar = azar or random.Random()
-    plan = plan_del_dia(fecha)
+    plan = [(h, r) for h, r in plan_del_dia(fecha) if horas is None or h in horas]
     usados = set(excluir)
     firmas: set[str] = set(excluir_familias)
     pozos: dict[str, list[Idea]] = {}
@@ -247,6 +253,16 @@ def armar_cola(
         cola.append(Envio(fecha.isoformat(), corrida(hora, azar), rubro, elegida.item_id,
                           elegida.titulo, texto_del_post(elegida, hooks.next())))
     return cola
+
+
+def huecos(fecha: dt.date, cola: list[Envio], ahora: dt.datetime) -> set[str]:
+    """Horarios base del plan sin envio que todavia no llegaron y llegan en menos de
+    VENTANA_HUECO. La hora de un envio es su base corrida al azar menos de 30 minutos."""
+    if ahora.date() != fecha:
+        return set()
+    ocupados = {e.hora[:3] + ("00" if int(e.hora[3:]) < 30 else "30") for e in cola}
+    desde, hasta = ahora.strftime("%H:%M"), (ahora + VENTANA_HUECO).strftime("%H:%M")
+    return {h for h, _ in plan_del_dia(fecha) if h not in ocupados and desde <= h <= hasta}
 
 
 def reemplazo(
