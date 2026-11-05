@@ -39,6 +39,18 @@ DIARIOS = {
     "marketing.aresmkt": (50, "01:43"),
     "setupjustobr": (50, "01:14"),
 }
+# Omni 720p 8 s; una fila de Flow sin --creditos cuenta esto (2026-11-05: 15 filas sin creditos
+# dejaron el saldo de internick2017 en "0 gastado" y se comio 200 puntos del pozo mensual).
+COSTO_FLOW = 12
+
+
+def cuenta_canonica(cuenta: str) -> str:
+    """'internick2017@gmail.com' y 'internick2017' son la misma cuenta."""
+    return cuenta.removesuffix("@gmail.com")
+
+
+def costo(f: dict) -> int:
+    return COSTO_FLOW if f["creditos"] is None else f["creditos"]
 
 
 def ultima_renovacion(hora: str, ahora: datetime) -> datetime:
@@ -52,8 +64,8 @@ def saldos(filas: list[dict], ahora: datetime) -> dict[str, tuple[int, int]]:
     out = {}
     for cuenta, (diario, hora) in DIARIOS.items():
         desde = ultima_renovacion(hora, ahora)
-        gastado = sum(f["creditos"] or 0 for f in filas
-                      if f["cuenta"] == cuenta and f["herramienta"] == "Flow" and not f["limite"]
+        gastado = sum(costo(f) for f in filas
+                      if cuenta_canonica(f["cuenta"]) == cuenta and f["herramienta"] == "Flow" and not f["limite"]
                       and desde <= datetime.fromisoformat(f["ts"]) <= ahora)
         out[cuenta] = (gastado, max(diario - gastado, 0))
     return out
@@ -71,7 +83,7 @@ def registrar(herramienta: str, cuenta: str, *, limite: bool = False,
     fila = {
         "ts": (ts or datetime.now()).isoformat(timespec="seconds"),
         "herramienta": herramienta,
-        "cuenta": cuenta,
+        "cuenta": cuenta_canonica(cuenta),
         "limite": limite,
         "creditos": creditos,
         "nota": nota,
@@ -79,6 +91,18 @@ def registrar(herramienta: str, cuenta: str, *, limite: bool = False,
     with ARCHIVO.open("a", encoding="utf-8") as f:
         f.write(json.dumps(fila, ensure_ascii=False) + "\n")
     return fila
+
+
+def aviso_diario(cuenta: str, filas: list[dict], ahora: datetime) -> str | None:
+    """Si la cuenta ya no tiene diario, nombra las que si: el pozo mensual va ultimo."""
+    s = saldos(filas, ahora)
+    cuenta = cuenta_canonica(cuenta)
+    if cuenta not in s or s[cuenta][1] > 0:
+        return None
+    libres = [f"{c} ({q})" for c, (_, q) in s.items() if q >= COSTO_FLOW]
+    if not libres:
+        return f"AVISO: {cuenta} sin diario y ninguna otra cuenta tiene; esto sale del pozo mensual."
+    return f"AVISO: {cuenta} ya no tiene diario, esto sale del pozo mensual. Con diario: {', '.join(libres)}"
 
 
 def leer(fecha: str) -> list[dict]:
@@ -123,6 +147,8 @@ def main() -> None:
     a = p.parse_args()
     if a.cmd == "registrar":
         registrar(a.herramienta, a.cuenta, limite=a.limite, creditos=a.creditos, nota=a.nota)
+        if a.herramienta == "Flow" and (msg := aviso_diario(a.cuenta, todas(), datetime.now())):
+            print(msg)
         print(resumen(datetime.now().strftime("%Y-%m-%d")))
     elif a.cmd == "saldo":
         ahora = datetime.now()
