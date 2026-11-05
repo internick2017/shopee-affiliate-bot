@@ -68,11 +68,14 @@ def comentario(link: str) -> str:
 def resolver_archivo(video: VideoProducido, carpeta: Path) -> VideoProducido:
     """Muchas filas viejas guardan solo el nombre del mp4, sin la carpeta (202 de 207
     se encuentran asi, medido 2026-10-29). Si la ruta no existe, se busca el mismo
-    nombre en `carpeta`; si tampoco esta, queda como estaba."""
+    nombre en `carpeta`; si tampoco esta, queda como estaba.
+    Las filas nuevas guardan la ruta relativa a `carpeta` (`lanny_por_enviar/x.mp4`):
+    esa se prueba antes que el nombre suelto, que puede ser un video viejo homonimo."""
     if video.archivo and not Path(video.archivo).is_file():
-        candidato = carpeta / Path(video.archivo).name
-        if candidato.is_file():
-            video.archivo = str(candidato)
+        for candidato in (carpeta / video.archivo, carpeta / Path(video.archivo).name):
+            if candidato.is_file():
+                video.archivo = str(candidato)
+                break
     return video
 
 
