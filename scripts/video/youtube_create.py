@@ -133,6 +133,11 @@ def main() -> int:
         salida.stem, herramienta="YouTube Create", prompt=prompt,
         estado="generado" if estado == "ok" else estado,
         gancho=gancho, item_id=item_id)
+    if estado != "rechazado":  # un rechazo no gasta cupo; cuenta = env YC_CUENTA (la app no la dice)
+        from scripts.video.cupo import registrar
+        if "YC_CUENTA" not in os.environ:
+            print("AVISO: falta YC_CUENTA, el video se anota con cuenta '?' y no cuenta en el cupo")
+        registrar("YouTube Create", os.environ.get("YC_CUENTA", "?"), limite=estado == "limite", nota=salida.stem)
     if estado != "ok":
         return 2
     d(description="Mais opções").click(timeout=10)

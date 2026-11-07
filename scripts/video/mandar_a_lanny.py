@@ -6,7 +6,7 @@ Uso (desde la raiz del repo):
     python scripts/video/mandar_a_lanny.py copos_versalhes chave_impacto ...      # en seco
     python scripts/video/mandar_a_lanny.py copos_versalhes chave_impacto --enviar
 
-Cada nombre es el de `videos_entregados/shopee-video-flow/<nombre>_lanny.mp4`; link y legenda
+Cada nombre es el de `videos_entregados/shopee-video-flow/lanny_por_enviar/<nombre>_lanny.mp4` (o de la raiz, si no esta ahi); link y legenda
 salen de `videos_producidos` (canal lanny). Sin --enviar deja todo listo, saca captura y
 descarta sin mandar. Toma el candado del celular: respetar los horarios de la cola del grupo.
 
@@ -120,6 +120,21 @@ def link_y_legenda(nombre: str) -> tuple[str, str]:
     return fila[0], fila[1]
 
 
+def marcar_enviado(nombre: str, archivo: Path) -> None:
+    """Pasa el video (y su copia limpia) a lanny_enviados y actualiza `archivo` en la base."""
+    if archivo.parent.name != "lanny_por_enviar":
+        return
+    destino = ENTREGA / "lanny_enviados"
+    destino.mkdir(exist_ok=True)
+    for f in (archivo, archivo.with_name(f"{nombre}_limpio.mp4")):
+        if f.is_file():
+            f.replace(destino / f.name)
+    db = sqlite3.connect(RAIZ / "grabados.db")
+    with db:
+        db.execute("UPDATE videos_producidos SET archivo = ? WHERE canal = 'lanny' AND archivo = ?",
+                   (f"lanny_enviados/{archivo.name}", f"lanny_por_enviar/{archivo.name}"))
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -135,12 +150,15 @@ def main() -> int:
         envio.texto(args.texto)
     for nombre in args.nombres:
         link, legenda = link_y_legenda(nombre)
-        archivo = ENTREGA / f"{nombre}_lanny.mp4"
-        if not archivo.is_file():
-            raise Fallo(f"Falta {archivo}")
+        archivo = next((c for c in (ENTREGA / "lanny_por_enviar" / f"{nombre}_lanny.mp4",
+                                    ENTREGA / f"{nombre}_lanny.mp4") if c.is_file()), None)
+        if archivo is None:
+            raise Fallo(f"Falta {nombre}_lanny.mp4 en lanny_por_enviar ni en {ENTREGA}")
         envio.video(archivo, legenda)
         time.sleep(3)
         envio.texto(link)
+        if args.enviar:
+            marcar_enviado(nombre, archivo)
         print(("ok " if args.enviar else "en seco ") + nombre)
         time.sleep(5)
     return 0
