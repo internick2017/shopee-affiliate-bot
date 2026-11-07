@@ -30,11 +30,14 @@ ARCHIVO = Path(__file__).resolve().parents[2] / "cupo_diario.jsonl"
 
 # Creditos diarios de Flow por cuenta y hora en que se renuevan (leidas en el menu de cuenta).
 # Mapa completo de cuentas: vault, 10-projects/bot-afiliados/mapa-cuentas-flow-create.md.
+# Lo individual de cada cuenta es SOLO el diario (50). Los 1000 mensuales de las cuentas Pro son un
+# pozo COMPARTIDO entre todas ellas (no se lleva aqui): se usa recien cuando los diarios se acaban.
 # shortcut: las Pro no muestran la hora de sus 50 diarios; se asume 00:00 hasta medirla.
 DIARIOS = {
     "internick2017": (50, "00:00"),
     "nick.inkaweb": (50, "00:00"),
     "nickgranados01": (50, "00:00"),
+    "internickbr": (50, "00:00"),  # Pro, Flow activado el 2026-11-06; hora de renovacion sin medir
     "nick.daniel@apikiwp": (50, "20:10"),
     "marketing.aresmkt": (50, "01:43"),
     "setupjustobr": (50, "01:14"),
@@ -65,10 +68,36 @@ def saldos(filas: list[dict], ahora: datetime) -> dict[str, tuple[int, int]]:
     for cuenta, (diario, hora) in DIARIOS.items():
         desde = ultima_renovacion(hora, ahora)
         gastado = sum(costo(f) for f in filas
-                      if cuenta_canonica(f["cuenta"]) == cuenta and f["herramienta"] == "Flow" and not f["limite"]
+                      if cuenta_canonica(f["cuenta"]) == cuenta and f["herramienta"].lower() == "flow" and not f["limite"]
                       and desde <= datetime.fromisoformat(f["ts"]) <= ahora)
         out[cuenta] = (gastado, max(diario - gastado, 0))
     return out
+
+
+# Cuentas de YouTube Create del celular (todas sirven todos los dias, Nick 2026-11-06). YouTube Create
+# no muestra su cupo: el "visto" es el maximo de videos en un dia sin cortar, medido en este archivo.
+YOUTUBE_CREATE = ("internick2017", "nick.inkaweb", "nickgranados01", "internickbr",
+                  "nick.daniel@apikiwp", "marketing.aresmkt", "setupjustobr")
+_ALIAS = {"nick.daniel@apikiwp.com": "nick.daniel@apikiwp", "marketing.aresmkt@gmail.com": "marketing.aresmkt",
+          "nickgranados01@gmail.com": "nickgranados01", "internickbr?": "internickbr"}
+
+
+def yc_saldo(filas: list[dict], hoy: str) -> dict[str, tuple[int, int, bool]]:
+    """Por cuenta: (videos de hoy, maximo visto en un dia, si hoy ya dio limite)."""
+    por_dia: dict[tuple[str, str], int] = defaultdict(int)
+    corto_hoy: set[str] = set()
+    for f in filas:
+        if not f["herramienta"].lower().startswith("youtube"):
+            continue
+        c = _ALIAS.get(f["cuenta"], cuenta_canonica(f["cuenta"]))
+        if f["limite"]:
+            if f["ts"].startswith(hoy):
+                corto_hoy.add(c)
+        else:
+            por_dia[(c, f["ts"][:10])] += 1
+    return {c: (por_dia.get((c, hoy), 0),
+                max((n for (k, _), n in por_dia.items() if k == c), default=0),
+                c in corto_hoy) for c in YOUTUBE_CREATE}
 
 
 def todas() -> list[dict]:
@@ -147,14 +176,26 @@ def main() -> None:
     a = p.parse_args()
     if a.cmd == "registrar":
         registrar(a.herramienta, a.cuenta, limite=a.limite, creditos=a.creditos, nota=a.nota)
-        if a.herramienta == "Flow" and (msg := aviso_diario(a.cuenta, todas(), datetime.now())):
-            print(msg)
+        if a.herramienta.lower() == "flow":
+            if cuenta_canonica(a.cuenta) not in DIARIOS:
+                print(f"AVISO: {a.cuenta} no esta en DIARIOS de cupo.py: agregarla ahi (diario y hora de renovacion) o su saldo no se cuenta.")
+            elif msg := aviso_diario(a.cuenta, todas(), datetime.now()):
+                print(msg)
         print(resumen(datetime.now().strftime("%Y-%m-%d")))
     elif a.cmd == "saldo":
         ahora = datetime.now()
         print("Flow, creditos diarios (gastado / queda; renueva):")
         for cuenta, (gastado, queda) in saldos(todas(), ahora).items():
             print(f"  {cuenta}: {gastado} / {queda}  (renueva {DIARIOS[cuenta][1]})")
+        print("YouTube Create, usar TODAS cada dia (hoy / maximo visto en un dia):")
+        for cuenta, (hoy_n, visto, corto) in yc_saldo(todas(), ahora.strftime("%Y-%m-%d")).items():
+            estado = "CORTADA hoy" if corto else (f"quedan ~{max(visto - hoy_n, 0)}" if visto else "sin datos, probar")
+            print(f"  {cuenta}: {hoy_n} / {visto or '?'}  {estado}")
+        sin = sum(1 for f in todas() if f["herramienta"].lower().startswith("youtube") and not f["limite"]
+                  and f["ts"].startswith(ahora.strftime("%Y-%m-%d")) and f["cuenta"] not in YOUTUBE_CREATE
+                  and _ALIAS.get(f["cuenta"]) not in YOUTUBE_CREATE)
+        if sin:
+            print(f"  OJO: {sin} videos de hoy SIN cuenta anotada (no cuentan arriba); corregir con YC_CUENTA=<cuenta> al generar")
     else:
         print(resumen(a.fecha))
 

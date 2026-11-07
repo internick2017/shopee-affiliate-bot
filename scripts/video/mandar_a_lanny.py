@@ -6,7 +6,7 @@ Uso (desde la raiz del repo):
     python scripts/video/mandar_a_lanny.py copos_versalhes chave_impacto ...      # en seco
     python scripts/video/mandar_a_lanny.py copos_versalhes chave_impacto --enviar
 
-Cada nombre es el de `videos_entregados/shopee-video-flow/<nombre>_lanny.mp4`; link y legenda
+Cada nombre es el de `videos_entregados/shopee-video-flow/lanny_por_enviar/<nombre>_lanny.mp4` (o de la raiz, si no esta ahi); link y legenda
 salen de `videos_producidos` (canal lanny). Sin --enviar deja todo listo, saca captura y
 descarta sin mandar. Toma el candado del celular: respetar los horarios de la cola del grupo.
 
@@ -135,9 +135,10 @@ def main() -> int:
         envio.texto(args.texto)
     for nombre in args.nombres:
         link, legenda = link_y_legenda(nombre)
-        archivo = ENTREGA / f"{nombre}_lanny.mp4"
-        if not archivo.is_file():
-            raise Fallo(f"Falta {archivo}")
+        archivo = next((c for c in (ENTREGA / "lanny_por_enviar" / f"{nombre}_lanny.mp4",
+                                    ENTREGA / f"{nombre}_lanny.mp4") if c.is_file()), None)
+        if archivo is None:
+            raise Fallo(f"Falta {nombre}_lanny.mp4 en lanny_por_enviar ni en {ENTREGA}")
         envio.video(archivo, legenda)
         time.sleep(3)
         envio.texto(link)
