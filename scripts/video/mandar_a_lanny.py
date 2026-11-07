@@ -120,6 +120,21 @@ def link_y_legenda(nombre: str) -> tuple[str, str]:
     return fila[0], fila[1]
 
 
+def marcar_enviado(nombre: str, archivo: Path) -> None:
+    """Pasa el video (y su copia limpia) a lanny_enviados y actualiza `archivo` en la base."""
+    if archivo.parent.name != "lanny_por_enviar":
+        return
+    destino = ENTREGA / "lanny_enviados"
+    destino.mkdir(exist_ok=True)
+    for f in (archivo, archivo.with_name(f"{nombre}_limpio.mp4")):
+        if f.is_file():
+            f.replace(destino / f.name)
+    db = sqlite3.connect(RAIZ / "grabados.db")
+    with db:
+        db.execute("UPDATE videos_producidos SET archivo = ? WHERE canal = 'lanny' AND archivo = ?",
+                   (f"lanny_enviados/{archivo.name}", f"lanny_por_enviar/{archivo.name}"))
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -142,6 +157,8 @@ def main() -> int:
         envio.video(archivo, legenda)
         time.sleep(3)
         envio.texto(link)
+        if args.enviar:
+            marcar_enviado(nombre, archivo)
         print(("ok " if args.enviar else "en seco ") + nombre)
         time.sleep(5)
     return 0
